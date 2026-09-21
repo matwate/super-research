@@ -1,0 +1,25 @@
+# Copy to research.toml (auto-loaded) or pass with --config FILE.
+# Precedence: defaults -> --preset -> research.toml -> --config -> CLI flags.
+
+[budgets]
+pages_per_depth = [30, 15, 8]   # pages scraped per hop depth; length = max depth
+page_tokens = 4000              # text kept per page
+anchors_per_page = 60           # links shown to Jev per page
+delve_per_page = 5              # links Jev may approve per page
+results_per_query = 20
+seed_queries = 10
+expansion_rounds = 1            # concept -> query rounds (the tree growing new branches)
+expansion_queries = 6
+expansion_reserve = 0.3         # share of depth-1 budget held for concept branches
+max_jev_calls = 400
+max_seconds = 600
+report_context_tokens = 50000
+report_max_output_tokens = 16000
+
+[gates]                         # Jev probabilities; lower toward 0.5 if the frontier collapses
+query = 0.5
+relevance = 0.5
+delve = 0.6
+concept = 0.5
+page_for_delve = 0.4
+depth_decay = 0.85
