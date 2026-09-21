@@ -1,0 +1,33 @@
+[project]
+name = "super-research"
+version = "0.1.0"
+description = "Research agent: Needle drafts, Jev decides, SearXNG searches, one LLM writes the report"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cactus-needle>=3.0.4",
+    "httpx>=0.28.1",
+    "laya>=0.3.4",
+    "rich>=15.0.0",
+    "selectolax>=0.4.12",
+    "tavily-python>=0.8.4",
+    "typesafe-sdk>=0.7.1",
+]
+
+[project.scripts]
+research = "super_research.main:main"
+super-research = "super_research.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.14,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
