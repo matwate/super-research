@@ -46,6 +46,21 @@ class JsonlLog:
         self.f.flush()
 
 
+def plain_emit(kind: str, **kw) -> None:
+    """Pipeline events as log lines (used with --plain or when not on a TTY)."""
+    if kind == "seeds":
+        log.info("needle drafted %d queries (%s)", len(kw["drafts"]), kw["source"])
+    elif kind == "gate":
+        log.info("jev kept %d/%d queries: %s", len(kw["ran"]), kw["total"], [n.label for n in kw["ran"]])
+    elif kind == "frontier":
+        log.info("frontier: %d queued sources", kw["size"])
+    elif kind == "page":
+        n = kw["node"]
+        log.info("  d%d %.2f  %s", n.depth, n.data.get("page_relevant", 0), n.url)
+    elif kind == "expand":
+        log.info("concept expansion: %s", [q.label for q in kw["queries"]])
+
+
 class Researcher:
     def __init__(
         self,
@@ -72,6 +87,7 @@ class Researcher:
         self.stop_reason: str | None = None
         self.timings: dict[str, float] = {}
         self.stage = "starting"  # read by the live UI
+        self.emit: Callable[..., None] = plain_emit  # the rich UI swaps this out
         # Pages a search backend already fetched (Tavily raw content), keyed by node id.
         self.prefetched: dict[str, scraper.Page] = {}
         (run_dir / "pages").mkdir(exist_ok=True)
@@ -100,7 +116,7 @@ class Researcher:
     async def seed_queries(self) -> list[Node]:
         self.stage = "1 · Needle drafts queries"
         drafts, source = await self.needle.draft_queries(self.ctx.needle_prompts(self.b.seed_queries))
-        log.info("needle drafted %d queries (%s)", len(drafts), source)
+        self.emit("seeds", drafts=drafts, source=source)
         self.tree.root.data["seed_source"] = source
         nodes = [n for q in drafts[: self.b.seed_queries] if (n := self.tree.add_query(q, self.tree.root.id, "needle_seed"))]
         already = [n.label for n in self.tree.of("query", "ran")]
@@ -112,7 +128,7 @@ class Researcher:
             n.score = p
             n.status = "ran" if p >= self.g.query else "skipped"
         ran = [n for n in nodes if n.status == "ran"]
-        log.info("jev kept %d/%d queries: %s", len(ran), len(nodes), [n.label for n in ran])
+        self.emit("gate", ran=ran, total=len(nodes))
         return ran
 
     # --- stage 3-4 --------------------------------------------------------------
@@ -146,7 +162,7 @@ class Researcher:
     async def search_round(self, queries: list[Node]) -> None:
         self.stage = f"3-4 · searching {len(queries)} queries, Jev rates results"
         await asyncio.gather(*(self.search_and_rate(q) for q in queries))
-        log.info("frontier: %d queued sources", self.tree.frontier_size())
+        self.emit("frontier", size=self.tree.frontier_size())
 
     # --- stage 5-6 --------------------------------------------------------------
 
@@ -176,7 +192,7 @@ class Researcher:
         if rel is None:
             return
         node.data["page_relevant"] = rel
-        log.info("  d%d %.2f  %s", node.depth, rel, node.url)
+        self.emit("page", node=node)
 
         tasks = []
         if rel >= 0.5:
@@ -253,7 +269,7 @@ class Researcher:
                 q.score, q.status = p, "ran"
                 q.data["mentions"] = mentions
                 queries.append(q)
-        log.info("concept expansion: %s", [q.label for q in queries])
+        self.emit("expand", queries=queries)
         if not queries:
             return False
         await self.search_round(queries)
@@ -421,6 +437,8 @@ async def run(
         error = repr(e)
         raise
     finally:
+        if ui:
+            ui.close()
         await http.aclose()
         await searx_http.aclose()
         if isinstance(judge, JevJudge):
@@ -521,10 +539,17 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--offline", action="store_true", help="stub Jev/Needle and skip the LLM (still searches and scrapes)")
     p.add_argument("--no-report", action="store_true", help="gather only; skip the final LLM call")
     p.add_argument("--print-config", action="store_true")
+    p.add_argument("--plain", action="store_true", help="log lines instead of the rich live dashboard")
     p.add_argument("-v", "--verbose", action="store_true")
     a = p.parse_args(argv)
 
-    logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S", stream=sys.stderr)
+    fancy = not a.plain and sys.stderr.isatty() and not a.print_config
+    if fancy:
+        from . import ui
+
+        ui.setup_logging(a.verbose)
+    else:
+        logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S", stream=sys.stderr)
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
@@ -534,6 +559,14 @@ def main(argv: list[str] | None = None) -> None:
         return
     if not a.topic:
         p.error("topic is required")
+    if fancy:
+        live = ui.LiveUI(a.topic, settings)
+        try:
+            run_dir = asyncio.run(run(a.topic, settings, a.intent, a.focus, write_report=not a.no_report, ui=live))
+        finally:
+            live.close()
+        ui.summary(run_dir, json.loads((run_dir / "run.json").read_text()), live.r.tree if live.r else None)
+        return
     run_dir = asyncio.run(run(a.topic, settings, a.intent, a.focus, write_report=not a.no_report))
     summary = json.loads((run_dir / "run.json").read_text())
     print(f"\nreport: {run_dir / 'report.md'}")
