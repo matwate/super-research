@@ -16,10 +16,12 @@ CHARS_PER_TOKEN = 4
 _STRIP = "script, style, noscript, svg, nav, header, footer, aside, form, iframe, button, [role=navigation], [aria-hidden=true]"
 _SKIP_HOSTS = re.compile(
     r"(^|\.)(twitter\.com|x\.com|facebook\.com|linkedin\.com|instagram\.com|t\.co|"
-    r"accounts\.google\.com|pinterest\.com|tiktok\.com|youtube\.com)$"
+    r"accounts\.google\.com|pinterest\.com|tiktok\.com|youtube\.com|"
+    r"scholar\.google\.[a-z.]+|scholar\.archive\.org|search\.crossref\.org)$"
 )
 _SKIP_PATH = re.compile(
     r"(login|signin|signup|register|logout|/cart|/checkout|privacy|terms|cookie|/tag/|/tags/|/share|"
+    r"/tables?/|/figures?/|/metrics$|/citeas|/export-citation|"
     r"\.(pdf|zip|tar|gz|png|jpe?g|gif|svg|mp4|mp3|ppt|pptx|docx?|xlsx?)$)",
     re.I,
 )
@@ -89,6 +91,17 @@ def extract(html: str, base_url: str, token_budget: int) -> Page:
     return Page(url=base_url, title=title[:200], text=text, anchors=list(anchors.values()), truncated=truncated)
 
 
+# Link labels that say nothing about the target: citation-list chrome and generic verbs.
+# A reference's real title sits in the surrounding text, not in these anchors.
+_CHROME_LABEL = re.compile(
+    r"^\[?(google scholar|crossref|cross ref|pubmed|pmc free article|free article|full text|"
+    r"full size (table|image|figure)|view (article|table|figure)|article|abstract|pdf|download|"
+    r"doi|cas|web of science|scopus|mathscinet|zbmath|isi|reference|ref|link|here|more|"
+    r"back to top|cite|citation|export citation|open in a new tab|search in google scholar)\]?$",
+    re.I,
+)
+
+
 def _anchor(base_url: str, href: str, label: str) -> Anchor | None:
     """Resolve and filter one link; None for chrome, social, files and self-links."""
     href = href.strip()
@@ -106,7 +119,7 @@ def _anchor(base_url: str, href: str, label: str) -> Anchor | None:
     # Same-site links with tiny labels are almost always navigation chrome.
     if host == urlsplit(base_url).netloc.lower().removeprefix("www.") and len(label) < 4:
         return None
-    if url.rstrip("/") == base_url.rstrip("/") or not label:
+    if url.rstrip("/") == base_url.rstrip("/") or not label or _CHROME_LABEL.match(label.strip()):
         return None
     return Anchor(url=url, text=label[:160])
 

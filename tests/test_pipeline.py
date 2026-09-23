@@ -26,6 +26,17 @@ def test_extract_main_text_and_anchors():
     assert [a.url for a in page.anchors] == ["https://ex.org/cagrad"]
 
 
+def test_citation_chrome_links_are_dropped():
+    html = """<html><body><main><p>Prior work on SIR models is extensive and relevant here.</p><ul>
+    <li>Raissi et al. <a href="https://scholar.google.com/scholar_lookup?title=PINN">Google Scholar</a>
+    <a href="https://doi.org/10.1038/x">CrossRef</a> <a href="https://doi.org/10.1371/y">DOI</a>
+    <a href="https://www.nature.com/articles/s41598/tables/9">Full size table</a>
+    <a href="https://doi.org/10.3934/bdia.2025012">10.3934/bdia.2025012</a>
+    <a href="https://github.com/a/pinn">this https URL</a></li></ul></main></body></html>"""
+    page = extract(html, "https://ex.org/paper", token_budget=1000)
+    assert [a.url for a in page.anchors] == ["https://doi.org/10.3934/bdia.2025012", "https://github.com/a/pinn"]
+
+
 def test_clean_terms():
     raw = ["PCGrad", "Yu et al., 2020", "gradient surgery", "Multi-task learning often suffers from conflicting gradients", "PCGrad", "NYUv2"]
     assert clean_terms(raw, "gradient surgery methods") == ["PCGrad", "NYUv2"]
