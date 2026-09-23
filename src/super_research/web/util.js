@@ -49,13 +49,20 @@ export function toast(message) {
 let mdLib;
 export async function markdown(text) {
   try {
-    mdLib ||= Promise.all([import("./vendor/marked.esm.js"), import("./vendor/purify.es.mjs")]);
+    mdLib ||= Promise.all([import("./vendor/marked.esm.js"), import("./vendor/purify.es.js")]);
     const [{ marked }, { default: DOMPurify }] = await mdLib;
-    return DOMPurify.sanitize(marked.parse(text || "", { gfm: true }), { FORBID_TAGS: ["img", "style", "iframe", "form", "input"] });
-  } catch {
+    return DOMPurify.sanitize(marked.parse(unfence(text || ""), { gfm: true }), { FORBID_TAGS: ["img", "style", "iframe", "form", "input"] });
+  } catch (e) {
+    console.error("markdown renderer failed to load", e);
     mdLib = null;
     return `<pre class="pre">${esc(text)}</pre>`;
   }
+}
+
+// Some models wrap the whole answer in ```markdown ... ```; older reports on disk may too.
+export function unfence(text) {
+  const m = text.trim().match(/^```(?:markdown|md)?[ \t]*\n([\s\S]*?)\n```$/i);
+  return m ? m[1] : text;
 }
 
 export function debounce(fn, ms) {

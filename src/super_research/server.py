@@ -16,6 +16,7 @@ import dataclasses
 import datetime as dt
 import json
 import logging
+import mimetypes
 import re
 import time
 from collections import deque
@@ -35,6 +36,12 @@ from .main import run, slugify
 from .report import PRICES
 
 log = logging.getLogger("research.web")
+
+# The page is ES modules, which browsers refuse unless served as JavaScript. On Windows
+# the registry often maps .js to text/plain, and Python's mimetypes reads it.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
 
 WEB_DIR = Path(__file__).parent / "web"
 RUN_ID = re.compile(r"^[a-z0-9-]+--\d{8}-\d{6}(-\d+)?$")

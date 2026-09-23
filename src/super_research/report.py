@@ -135,7 +135,7 @@ async def write(
     tin, tout = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     price = PRICES.get(model)
     cost = (tin * price[0] + tout * price[1]) / 1e6 if price else None
-    text = strip_reasoning(choice["message"].get("content") or "")
+    text = unfence(strip_reasoning(choice["message"].get("content") or ""))
     if not text:
         raise RuntimeError(f"empty report (finish_reason={choice.get('finish_reason')}); raise report_max_output_tokens")
     return ReportResult(text, data.get("model", model), tin, tout, cost, choice.get("finish_reason", ""), n_sources)
@@ -143,6 +143,15 @@ async def write(
 
 def strip_reasoning(text: str) -> str:
     return _THINK.sub("", text).strip()
+
+
+_FENCED = re.compile(r"^```(?:markdown|md)?[ \t]*\n(.*?)\n```$", re.S | re.I)
+
+
+def unfence(text: str) -> str:
+    """Some models wrap the whole report in a ```markdown block; keep the inside."""
+    m = _FENCED.match(text.strip())
+    return m.group(1).strip() if m else text
 
 
 def offline_report(ctx: ResearchContext, tree: KnowledgeTree, context_tokens: int) -> ReportResult:

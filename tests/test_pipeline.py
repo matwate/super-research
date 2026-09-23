@@ -178,3 +178,11 @@ def test_worth_extracting():
     assert worth_extracting(ScrapeError("too little text (blocked, JS-only, or empty)"))
     assert not worth_extracting(ScrapeError("HTTP 404"))
     assert not worth_extracting(ScrapeError("not html: application/pdf"))
+
+
+def test_unfence_report():
+    from super_research.report import unfence
+
+    assert unfence("```markdown\n# Title\n\nbody\n```") == "# Title\n\nbody"
+    assert unfence("  ```md\n# T\n```  ") == "# T"
+    assert unfence("# Title\n\n```python\nx = 1\n```") == "# Title\n\n```python\nx = 1\n```"

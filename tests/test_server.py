@@ -116,3 +116,9 @@ def test_stream_sends_nodes(client):
     assert payloads[0]["full"] is True
     assert any(n["kind"] == "root" for p in payloads for n in p["nodes"])
     wait_done(client, run_id)
+
+
+def test_modules_served_as_javascript(client):
+    for path in ("/static/app.js", "/static/util.js", "/static/vendor/marked.esm.js", "/static/vendor/purify.es.js"):
+        r = client.get(path)
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript"), path
