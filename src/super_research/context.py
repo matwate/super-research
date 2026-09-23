@@ -11,6 +11,12 @@ from .config import Template
 # Words that describe the deliverable rather than the subject; stripped for query building
 # so "gradient surgery methods and results" searches as "gradient surgery ... survey".
 _FILLER = re.compile(r"\b(methods?|results?|and|overview|papers?|research|the|of|latest|recent|approaches|techniques)\b", re.IGNORECASE)
+# Question and filler words dropped when a long topic is cut down to a search anchor.
+_ANCHOR_STOP = set(
+    """how has have had what why when which who is are was were does do did can could should would the a an in
+    for of over last past recent years year evolved changed change changes with to on about i my we our it its
+    this that these those and or from into since been be best way ways""".split()
+)
 PLAN_CHUNK = 4  # Needle splits short plans reliably; long ones blur together
 
 
@@ -30,6 +36,7 @@ class ResearchContext:
     draft_focus: str = ""
     report_outline: str = ""
     report_rules: str = ""
+    anchor: str = ""  # 2-4 words appended to concept queries ("LangGraph <anchor>")
 
     def as_state(self) -> dict:
         """What Jev sees as `research` in every question."""
@@ -79,9 +86,12 @@ def build(
         "last_year": str(year - 1),
         "focus": f", including {', '.join(focus)}" if focus else "",
     }
+    words = core.split()
+    anchor = core if len(words) <= 4 else " ".join([w for w in words if w.lower() not in _ANCHOR_STOP][:4]) or core
     ctx = ResearchContext(
         topic=topic,
         core=core,
+        anchor=anchor,
         intent=intent or fill(t.intent, values),
         deliverable=fill(t.deliverable, values),
         tone=fill(t.tone, values),

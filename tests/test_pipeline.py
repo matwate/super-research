@@ -142,8 +142,14 @@ def test_strip_reasoning():
 
 def test_parse_draft():
     text = '<think>hmm</think>Sure:\n```json\n{"queries": ["PINN SEIR", "PINN SEIR", " stiff ODE PINN ", 3, ""]}\n```'
-    assert parse_draft(text, 10) == ["PINN SEIR", "stiff ODE PINN"]
-    assert parse_draft("no json here", 10) == []
+    assert parse_draft(text, 10) == (["PINN SEIR", "stiff ODE PINN"], "")
+    assert parse_draft("no json here", 10) == ([], "")
+    assert parse_draft('{"anchor": "Python LLM APIs", "queries": ["a b"]}', 10) == (["a b"], "Python LLM APIs")
+
+
+def test_anchor_fallback_for_long_topics():
+    assert context.build("PINN for disease modeling").anchor == "PINN for disease modeling"
+    assert context.build("how has interfacing with ai models evolved in python for the last years?").anchor == "interfacing ai models python"
 
 
 async def test_seed_queries_use_drafter_then_fallback(tmp_path):
@@ -154,7 +160,7 @@ async def test_seed_queries_use_drafter_then_fallback(tmp_path):
     search_fn, fetch_fn = fake_web()
 
     async def good(c, n):
-        return Draft(["PCGrad multi-task conflicting gradients", "gradient surgery survey"], "glm-5.3-flash", 100, 50, 0.0001)
+        return Draft(["PCGrad multi-task conflicting gradients", "gradient surgery survey"], "gradient surgery", "glm-5.3-flash", 100, 50, 0.0001)
 
     r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn, good)
     await r.seed_queries()

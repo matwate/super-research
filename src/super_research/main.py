@@ -126,6 +126,8 @@ class Researcher:
             try:
                 self.draft = await self.draft_fn(self.ctx, self.b.seed_queries)
                 drafts, source = self.draft.queries, f"llm {self.draft.model}"
+                if self.draft.anchor:
+                    self.ctx.anchor = self.draft.anchor
             except Exception as e:  # any drafter failure falls back to the template plan
                 log.warning("query drafter failed, using template facets: %s", e)
         if not drafts:
@@ -295,7 +297,7 @@ class Researcher:
             for cid in ids[1:]:
                 self.tree.nodes[cid].status = "promoted"
                 anchor.also_from.append(self.tree.nodes[cid].parent)
-            q = self.tree.add_query(f"{term} {self.ctx.core}", anchor.id, via)
+            q = self.tree.add_query(f"{term} {self.ctx.anchor}", anchor.id, via)
             if q:
                 q.score, q.status = p, "ran"
                 q.data["mentions"] = mentions
