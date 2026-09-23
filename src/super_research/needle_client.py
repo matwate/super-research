@@ -48,6 +48,48 @@ def regex_terms(text: str, limit: int = 10) -> list[str]:
     return sorted(counts, key=lambda k: -counts[k])[:limit]
 
 
+# Problem phrases: niche papers are usually *about a problem* ("gradient imbalance",
+# "parameter identifiability"), so these seed searches that name-shaped concepts miss.
+_PROBLEM_HEADS = (
+    r"imbalances?|patholog(?:y|ies)|bias|stiffness|instabilit(?:y|ies)|failures?|collapse|vanishing|"
+    r"exploding|overfitting|underfitting|(?:non-)?identifiability|conflicts?|degradation|sensitivity|"
+    r"scarcity|sparsity|ill-posedness|ill-conditioning|oscillations?|bottlenecks?|mismatch|"
+    r"trade-?offs?|forgetting|drift|leakage|spectral bias|convergence issues?"
+)
+_PROBLEM = re.compile(rf"\b((?:[a-z][a-z-]{{2,}}\s+){{0,2}})({_PROBLEM_HEADS})\b", re.I)
+# Heads specific enough to stand alone; others need a modifier ("gradient imbalance", not "imbalance").
+_STANDALONE = {"stiffness", "identifiability", "non-identifiability", "overfitting", "ill-conditioning", "ill-posedness"}
+_NOT_MODIFIER = set(
+    """the a an this that these those its their our his her of and or to in on at by for with from as into
+    some any no such other more most less each both all can may which also be is are was were been very
+    many several major key critical important primary large small intense extreme practical credible
+    reliable another main common known certain severe strong further new novel existing current typical
+    general possible serious significant potential high low great greater higher lower overall inherent
+    present presents prevent under over without within due same different various specific particular
+    well known still often common only even""".split()
+)
+
+
+def problem_phrases(text: str, topic: str, limit: int = 5) -> list[str]:
+    """Code-side candidates for technical problems named on a page, most frequent first."""
+    topic_l = topic.lower()
+    counts: dict[str, int] = {}
+    for m in _PROBLEM.finditer(text):
+        mods: list[str] = []
+        for w in reversed(m.group(1).lower().split()):
+            if w in _NOT_MODIFIER or w.endswith("ing") or w.endswith("ly"):
+                break
+            mods.insert(0, w)
+        head = m.group(2).lower()
+        if not mods and head not in _STANDALONE:
+            continue
+        phrase = " ".join(mods + [head])
+        if phrase in topic_l:
+            continue
+        counts[phrase] = counts.get(phrase, 0) + 1
+    return sorted(counts, key=lambda k: -counts[k])[:limit]
+
+
 def dense_paragraphs(text: str, n: int = TERM_PARAGRAPHS) -> list[str]:
     paras = [p.strip() for p in text.split("\n") if 80 < len(p.strip()) and not p.startswith("#")]
     scored = sorted(paras, key=lambda p: -len(_NAMED.findall(p)))

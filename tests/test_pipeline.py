@@ -5,7 +5,7 @@ import json
 from super_research import config, context
 from super_research.jev_client import StubJudge
 from super_research.main import Researcher, build_overrides, main, run
-from super_research.needle_client import StubNeedle, clean_terms
+from super_research.needle_client import StubNeedle, clean_terms, problem_phrases
 from super_research.report import assemble
 from super_research.scraper import extract
 from super_research.searx import SearchResult
@@ -40,6 +40,18 @@ def test_citation_chrome_links_are_dropped():
 def test_clean_terms():
     raw = ["PCGrad", "Yu et al., 2020", "gradient surgery", "Multi-task learning often suffers from conflicting gradients", "PCGrad", "NYUv2"]
     assert clean_terms(raw, "gradient surgery methods") == ["PCGrad", "NYUv2"]
+
+
+def test_problem_phrases():
+    text = (
+        "PINNs suffer from gradient imbalance between loss terms. The gradient imbalance grows with "
+        "stiffness of the ODE. Another major limitation is parameter identifiability, and preventing "
+        "overfitting under extreme data scarcity."
+    )
+    got = problem_phrases(text, "PINN for disease modeling")
+    assert got[0] == "gradient imbalance"
+    assert {"stiffness", "parameter identifiability", "data scarcity", "overfitting"} <= set(got)
+    assert not any(w in " ".join(got) for w in ("major", "extreme", "preventing"))
 
 
 def test_clean_terms_drops_chrome_and_topic_plurals():

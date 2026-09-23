@@ -32,7 +32,7 @@ isn't a TTY).
 | 4 | Jev | one Noul per result, bundled per query: scrape or skip |
 | 5 | scraper | main text + in-content anchors, capped per page. arXiv is read from `/html/` (full paper), and Tavily extract is the fallback for bot walls and JS-only pages |
 | 6 | Jev | page-content Noul (the stop signal), then one Noul per anchor: delve or not; recurse by depth |
-| ↻ | Needle + Jev | **concept expansion**: named methods/datasets on good pages → Jev gate → new queries hung off the page that mentioned them → back to 3 |
+| ↻ | Needle + Jev | **concept expansion**: named methods/datasets (Needle + regex) and technical problems ("gradient imbalance", "parameter identifiability"; cue-word extractor) on good pages → a Jev gate per kind → new queries hung off the page that mentioned them → back to 3 |
 | 7 | OpenCode Go | one call sees intent, queries, the rendered tree, and page text by relevance, and writes the report |
 
 ## The knowledge tree
@@ -95,6 +95,9 @@ delves whose content Jev then scored as relevant (target ≥ 0.7).
 - Needle 3 grounds every argument in its input and refuses rather than invent. It can't
   brainstorm new queries, so stage 1 has it split a templated plan, and new search terms
   come from concept expansion. For ambiguous topics, add `--focus` terms or `--intent`.
+- Problem phrases exist because niche papers are usually *about a problem*. In testing,
+  "PINN for disease modeling" never surfaced a paper on gradient pathology until
+  "gradient imbalance", found on a scraped page, became a query.
 - Term extraction merges Needle spans (from the most name-dense paragraphs; long inputs make
   it refuse) with regex candidates. Jev's concept gate does the selecting.
 - Search backends: `search_backends = ["auto"]` means Tavily + SearXNG when `TAVILY_API_KEY`

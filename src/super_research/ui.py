@@ -104,7 +104,7 @@ class LiveUI:
                 f"{escape(n.label[:70])} [dim]{_host(n.url)}[/]{src}"
             )
         elif kind == "expand":
-            names = ", ".join(escape(q.label) for q in kw["queries"]) or "none"
+            names = ", ".join(("⚠ " if q.via == "problem_concept" else "") + escape(q.label) for q in kw["queries"]) or "none"
             p(f"[yellow]↻ concepts[/] → {names}")
 
     # --- live panel ---------------------------------------------------------------
@@ -153,8 +153,11 @@ def knowledge_tree(tree, max_children: int = 12) -> Tree:
 
     def label(n) -> str:
         if n.kind == "query":
-            return f"[blue]🔎 {escape(n.label)}[/] [dim]{n.score:.2f} · {n.via.replace('needle_', '')}[/]"
+            via = {"needle_seed": "seed", "needle_concept": "concept", "problem_concept": "problem"}.get(n.via, n.via)
+            return f"[blue]🔎 {escape(n.label)}[/] [dim]{n.score:.2f} · {via}[/]"
         if n.kind == "concept":
+            if n.data.get("kind") == "problem":
+                return f"[red]⚠ {escape(n.label)}[/]"
             return f"[yellow]💡 {escape(n.label)}[/]"
         rel = n.data.get("page_relevant")
         sid = f"[bold]S{n.data['sid']}[/] " if "sid" in n.data else ""

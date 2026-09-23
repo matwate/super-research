@@ -27,6 +27,7 @@ import httpx
 
 from . import config as cfg
 from . import context, report, scraper, searx, tavily_client
+from .needle_client import problem_phrases
 from .jev_client import JEV_PRICE_PER_MTOK, JevBudgetExceeded, JevJudge, StubJudge
 from .schemas import Node
 from .tree_manager import KnowledgeTree, normalize_url
@@ -222,6 +223,8 @@ class Researcher:
         terms = await self.needle.extract_terms(page.title, page.text, self.ctx.core)
         for t in terms:
             self.tree.add_concept(t, node.id)
+        for p in problem_phrases(page.text, self.ctx.core):
+            self.tree.add_concept(p, node.id, kind="problem")
 
     async def crawl(self, reserve: bool = False) -> None:
         self.stage = "5-6 · scraping, Jev picks links to delve"
@@ -237,43 +240,52 @@ class Researcher:
     # --- concept expansion --------------------------------------------------------
 
     async def expand(self) -> bool:
-        """Turn concepts Needle found on pages into new search branches. Returns whether
-        any new queries ran."""
+        """Turn concepts found on pages into new search branches: named methods/datasets
+        and technical problems, each through its own Jev gate and query budget. Returns
+        whether any new queries ran."""
         if self.tree.depth1_room() <= 0:
             return False
         self.stage = "↻ · concept expansion"
-        cands = self.tree.concept_candidates()[: self.b.expansion_queries * 4]
-        if not cands:
-            return False
-        scores = await self._guard(self.judge.gate_concepts(self.research, [(t, n) for t, n, _ in cands]))
-        if scores is None:
-            return False
-        ranked = sorted(zip(cands, scores), key=lambda t: -t[1])
-        queries: list[Node] = []
-        for (term, mentions, ids), p in ranked:
-            for cid in ids:
-                self.tree.nodes[cid].score = p
-            if p < self.g.concept or len(queries) >= self.b.expansion_queries:
-                for cid in ids:
-                    self.tree.nodes[cid].status = "skipped"
-                continue
-            # The query hangs off the page where the concept was mentioned most prominently
-            # (the first one found); other mentions are recorded as also_from.
-            anchor = self.tree.nodes[ids[0]]
-            anchor.status = "promoted"
-            for cid in ids[1:]:
-                self.tree.nodes[cid].status = "promoted"
-                anchor.also_from.append(self.tree.nodes[cid].parent)
-            q = self.tree.add_query(f"{term} {self.ctx.core}", anchor.id, "needle_concept")
-            if q:
-                q.score, q.status = p, "ran"
-                q.data["mentions"] = mentions
-                queries.append(q)
+        kinds = [
+            ("name", self.judge.gate_concepts, self.g.concept, self.b.expansion_queries, "needle_concept"),
+            ("problem", self.judge.gate_problems, self.g.problem, self.b.expansion_problem_queries, "problem_concept"),
+        ]
+        batches = await asyncio.gather(*(self._promote(*k) for k in kinds))
+        queries = [q for batch in batches for q in batch]
         self.emit("expand", queries=queries)
         if not queries:
             return False
         await self.search_round(queries)
         return True
+
+    async def _promote(self, kind: str, gate_fn, gate: float, budget: int, via: str) -> list[Node]:
+        cands = self.tree.concept_candidates(kind)[: budget * 4]
+        if not cands or budget <= 0:
+            return []
+        scores = await self._guard(gate_fn(self.research, [(t, n) for t, n, _ in cands]))
+        if scores is None:
+            return []
+        queries: list[Node] = []
+        for (term, mentions, ids), p in sorted(zip(cands, scores), key=lambda t: -t[1]):
+            for cid in ids:
+                self.tree.nodes[cid].score = p
+            if p < gate or len(queries) >= budget:
+                for cid in ids:
+                    self.tree.nodes[cid].status = "skipped"
+                continue
+            # The query hangs off the first page that mentioned the concept; other
+            # mentions are recorded as also_from.
+            anchor = self.tree.nodes[ids[0]]
+            anchor.status = "promoted"
+            for cid in ids[1:]:
+                self.tree.nodes[cid].status = "promoted"
+                anchor.also_from.append(self.tree.nodes[cid].parent)
+            q = self.tree.add_query(f"{term} {self.ctx.core}", anchor.id, via)
+            if q:
+                q.score, q.status = p, "ran"
+                q.data["mentions"] = mentions
+                queries.append(q)
+        return queries
 
     # --- whole pass ----------------------------------------------------------------
 

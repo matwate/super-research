@@ -42,7 +42,7 @@ TERMS_TOOL: dict[str, Any] = {
 
 NodeKind = Literal["root", "query", "source", "concept"]
 # How a node came to exist; the edge label from its parent.
-Via = Literal["topic", "needle_seed", "needle_concept", "search", "link", "extract"]
+Via = Literal["topic", "needle_seed", "needle_concept", "problem_concept", "search", "link", "extract"]
 Status = Literal[
     "pending",  # created, no decision yet
     "skipped",  # a Jev gate said no

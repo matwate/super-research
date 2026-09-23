@@ -32,6 +32,8 @@ class Budgets:
     # the best pages; they become candidate queries for another search round.
     expansion_rounds: int = 1
     expansion_queries: int = 6
+    # Of which extra searches for problem phrases ("gradient imbalance") per round.
+    expansion_problem_queries: int = 3
     # Share of the depth-1 page budget held back from seed results so concept branches
     # still have room to be scraped. 0 lets seeds take everything.
     expansion_reserve: float = 0.3
@@ -56,6 +58,7 @@ class Gates:
     # DOI landing pages in testing (delve precision 0.58); 0.6 keeps nearly all good ones.
     delve: float = 0.6
     concept: float = 0.5  # turn an extracted concept into a search
+    problem: float = 0.5  # turn an extracted problem phrase into a search
     # A page's own content must score at least this before its links are considered.
     # Stops the crawl drifting off-topic through pages that turned out to be irrelevant.
     page_for_delve: float = 0.4

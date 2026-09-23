@@ -34,6 +34,7 @@ class Judge(Protocol):
     async def page_relevance(self, research: dict, page: Page) -> float: ...
     async def rate_links(self, research: dict, page: Page, anchors: list[Anchor]) -> list[float]: ...
     async def gate_concepts(self, research: dict, concepts: list[tuple[str, int]]) -> list[float]: ...
+    async def gate_problems(self, research: dict, problems: list[tuple[str, int]]) -> list[float]: ...
 
 
 # Criteria are spelled out because Jev reads questions literally.
@@ -56,6 +57,11 @@ _Q_LINK = NoulCriteria(
 _Q_CONCEPT = NoulCriteria(
     true="A specific named method, algorithm, model, dataset, or benchmark that is part of the research topic.",
     false="A broad field or discipline name (such as Machine Learning or Computer Vision), a generic phrase, a sentence fragment, a citation fragment such as an author name and year, or something unrelated to the research topic.",
+)
+
+_Q_PROBLEM = NoulCriteria(
+    true="A concrete technical difficulty within the research topic, such as a training pathology, numerical issue, data limitation, or modeling challenge, specific enough to be the subject of a paper.",
+    false="A vague or generic phrase, a difficulty unrelated to the research topic, or everyday wording that happens to contain a problem word.",
 )
 
 
@@ -143,6 +149,16 @@ class JevJudge:
         r = await self._nouls("gate_concepts", state, qs, [t for t, _ in concepts])
         return [r[f"c{i}"] for i in range(len(items))]
 
+    async def gate_problems(self, research, problems):
+        items = [{"phrase": t, "mentioned_on_pages": n} for t, n in problems]
+        state = {"research": research, "problems": items}
+        qs = {
+            f"c{i}": Noul(instructions=f"Is `problems[{i}].phrase` a specific technical problem in `research.topic` worth a focused search for work that addresses it?", criteria=_Q_PROBLEM)
+            for i in range(len(items))
+        }
+        r = await self._nouls("gate_problems", state, qs, [t for t, _ in problems])
+        return [r[f"c{i}"] for i in range(len(items))]
+
 
 class StubJudge:
     """Offline judge: keyword overlap with the topic. Deterministic, free, dumb."""
@@ -182,3 +198,6 @@ class StubJudge:
 
     async def gate_concepts(self, research, concepts):
         return self._tick("gate_concepts", [t for t, _ in concepts], [0.6 if len(t) < 40 else 0.2 for t, _ in concepts])
+
+    async def gate_problems(self, research, problems):
+        return self._tick("gate_problems", [t for t, _ in problems], [0.6 if len(t.split()) >= 2 else 0.3 for t, _ in problems])

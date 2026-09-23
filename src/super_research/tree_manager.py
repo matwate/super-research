@@ -121,8 +121,9 @@ class KnowledgeTree:
         self._url_index[key] = node.id
         return None
 
-    def add_concept(self, term: str, parent: str) -> Node:
-        return self._add("concept", term, parent, "extract")
+    def add_concept(self, term: str, parent: str, kind: str = "name") -> Node:
+        """kind: "name" (method/dataset/benchmark) or "problem" (a technical difficulty)."""
+        return self._add("concept", term, parent, "extract", data={"kind": kind})
 
     def known_url(self, url: str) -> bool:
         return normalize_url(url) in self._url_index
@@ -187,12 +188,14 @@ class KnowledgeTree:
     def origin_query(self, node: Node) -> Node | None:
         return next((n for n in reversed(self.ancestry(node)) if n.kind == "query"), None)
 
-    def concept_candidates(self) -> list[tuple[str, int, list[str]]]:
-        """Pending concepts aggregated across pages: (term, mention count, node ids),
-        most-mentioned first. Terms that already have a query are dropped."""
+    def concept_candidates(self, kind: str = "name") -> list[tuple[str, int, list[str]]]:
+        """Pending concepts of one kind aggregated across pages: (term, mention count,
+        node ids), most-mentioned first. Terms that already have a query are dropped."""
         groups: dict[str, list[str]] = {}
         names: dict[str, Counter] = {}
         for n in self.of("concept", "pending"):
+            if n.data.get("kind", "name") != kind:
+                continue
             key = " ".join(n.label.lower().split())
             groups.setdefault(key, []).append(n.id)
             names.setdefault(key, Counter())[n.label] += 1
@@ -236,7 +239,7 @@ class KnowledgeTree:
             if n.kind == "query":
                 return f'query "{n.label}"{score} ({n.via}, {n.status})'
             if n.kind == "concept":
-                return f"concept: {n.label} ({n.status})"
+                return f"{n.data.get('kind', 'name')} concept: {n.label} ({n.status})"
             tag = f"S{n.data['sid']}" if "sid" in n.data else n.status
             rel = n.data.get("page_relevant")
             rel_s = f" content={rel:.2f}" if rel is not None else ""
