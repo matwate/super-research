@@ -17,6 +17,11 @@ max_seconds = 600
 report_context_tokens = 50000
 report_max_output_tokens = 16000
 
+# Top-level settings (put these above the [budgets] table in a real file):
+# draft_model = "glm-5.3-flash"   # seed-query drafter; "" = template facets
+# report_model = "minimax-m3"
+# tavily_depth = "basic"          # "advanced" = 2 credits/search, better on ambiguous topics
+
 [gates]                         # Jev probabilities; lower toward 0.5 if the frontier collapses
 query = 0.5
 relevance = 0.5

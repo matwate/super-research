@@ -1,8 +1,8 @@
 # super-research
 
-A research agent that spends on one expensive model call per pass. Small models do the
-routing: Needle 3 (local) drafts queries and pulls out named concepts, and Jev (TypeSafe)
-makes every keep/skip decision. Tavily and SearXNG search. One OpenCode Go LLM call writes the report
+A research agent that spends on one expensive model call per pass. Cheap models do the
+routing: a flash LLM drafts the seed queries (~$0.0001), Needle 3 (local) pulls named
+concepts out of pages, and Jev (TypeSafe) makes every keep/skip decision. Tavily and SearXNG search. One OpenCode Go LLM call writes the report
 from a **knowledge tree** of everything the pass found.
 
 ```bash
@@ -26,7 +26,7 @@ isn't a TTY).
 | Stage | Who | What |
 | --- | --- | --- |
 | 0 | template | topic → intent / deliverable / filter block, plus a facet plan (`survey`, `benchmark comparison`, `arxiv`, …) |
-| 1 | Needle | splits the plan into grammar-constrained `search_web` calls (retried once per chunk, template fallback) |
+| 1 | flash LLM | `draft_model` (default `glm-5.3-flash`) drafts varied queries in the field's own vocabulary. If the call fails, Needle splits the template plan instead |
 | 2 | Jev | one Noul per query: run or skip |
 | 3 | Tavily + SearXNG | both backends queried in parallel and merged by URL. Tavily returns page text, so those pages skip scraping |
 | 4 | Jev | one Noul per result, bundled per query: scrape or skip |
@@ -93,8 +93,10 @@ delves whose content Jev then scored as relevant (target ≥ 0.7).
 ## Notes
 
 - Needle 3 grounds every argument in its input and refuses rather than invent. It can't
-  brainstorm new queries, so stage 1 has it split a templated plan, and new search terms
-  come from concept expansion. For ambiguous topics, add `--focus` terms or `--intent`.
+  brainstorm queries (splitting the template plan, it dropped facets and every run looked
+  the same), so a flash LLM drafts the seeds. In a 4-way test all flash models cost about
+  $0.0001 per pass; glm-5.3-flash wrote the best set. Use `--set draft_model=""` to go back
+  to template seeds. For ambiguous topics, add `--focus` terms or `--intent`.
 - Problem phrases exist because niche papers are usually *about a problem*. In testing,
   "PINN for disease modeling" never surfaced a paper on gradient pathology until
   "gradient imbalance", found on a scraped page, became a query.
