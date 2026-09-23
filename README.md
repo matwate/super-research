@@ -103,8 +103,9 @@ delves whose content Jev then scored as relevant (target ≥ 0.7).
 - Search backends: `search_backends = ["auto"]` means Tavily + SearXNG when `TAVILY_API_KEY`
   is set, otherwise SearXNG only. Tavily uses `advanced` depth and prefers academic domains
   (arxiv, openreview, NeurIPS, PMLR, ACL, GitHub) without excluding others. That's what makes
-  ambiguous topics like "gradient surgery" work. It costs about $0.15 per quick pass at
-  pay-as-you-go rates (estimate: $0.008/credit; check your plan).
+  ambiguous topics like "gradient surgery" work. At $0.008/credit (2 credits per advanced
+  search) it's about $0.15 for a quick pass and $0.30 for a standard one, the largest cost
+  item. `--set tavily_depth=basic` halves it.
 - On this SearXNG instance, DuckDuckGo, Brave, Startpage and Google are captcha'd or empty,
   and Google Scholar gets suspended under repeated use. The default engines are
   `bing, google scholar, crossref, arxiv, semantic scholar`.

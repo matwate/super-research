@@ -136,7 +136,7 @@ class LiveUI:
         jev_usd = self.judge.input_tokens * JEV_PRICE_PER_MTOK / 1e6
         spend = f"jev [bold]{self.judge.calls}[/] calls ${jev_usd:.4f}"
         if self.tavily:
-            spend += f"   tavily [bold]{self.tavily.credits}[/] credits ~${self.tavily.usd:.3f}"
+            spend += f"   tavily [bold]{self.tavily.credits}[/] credits ${self.tavily.usd:.3f}"
         counts.add_row(f"concepts [bold]{c('concept:promoted')}[/] promoted [dim]/ {concepts} found[/]", spend)
         return Panel(Group(head, bars, counts), title=f"[bold]{escape(self.topic)}[/]", border_style="cyan", box=box.ROUNDED)
 
@@ -190,7 +190,7 @@ def summary(run_dir: Path, s: dict, tree=None) -> None:
     t.add_row("delve precision", f"[{'green' if dp and dp >= 0.7 else 'yellow'}]{dp}[/] ({tr['delved_pages']} delved)" if dp is not None else "—")
     t.add_row("jev", f"{s['jev']['calls']} calls · ${s['jev']['cost_usd']:.4f}")
     if s["search"]["tavily_credits"]:
-        t.add_row("tavily", f"{s['search']['tavily_credits']} credits · ~${s['search']['tavily_usd_est']:.3f}")
+        t.add_row("tavily", f"{s['search']['tavily_credits']} credits · ${s['search']['tavily_usd']:.3f}")
     if s["report"]:
         r = s["report"]
         cost = f"${r['cost_usd']:.3f}" if r["cost_usd"] is not None else "?"

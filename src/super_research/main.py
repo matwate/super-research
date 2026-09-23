@@ -475,7 +475,7 @@ async def run(
                 "tavily_credits": tavily.credits if tavily else 0,
                 "tavily_searches": tavily.searches if tavily else 0,
                 "tavily_extracts": tavily.extracts if tavily else 0,
-                "tavily_usd_est": round(tavily_cost, 4),
+                "tavily_usd": round(tavily_cost, 4),
             },
             "report": dataclasses.asdict(result) | {"markdown": None} if result else None,
             "cost_usd_total": round(jev_cost + tavily_cost + (llm_cost or 0.0), 4) if llm_cost is not None else None,

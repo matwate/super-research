@@ -11,8 +11,8 @@ from tavily import AsyncTavilyClient
 from .scraper import Page, ScrapeError, page_from_markdown
 from .searx import SearchResult
 
-# Pay-as-you-go estimate; check tavily.com/pricing. Basic search = 1 credit, advanced = 2,
-# basic extract = 1 credit per 5 URLs.
+# Price per credit as of 2026-09 (confirmed by the account owner). Basic search = 1 credit,
+# advanced = 2, basic extract = 1 credit per 5 URLs.
 USD_PER_CREDIT = 0.008
 
 
