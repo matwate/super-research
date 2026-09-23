@@ -44,9 +44,37 @@ and never writes them to `run.json`, logs or `reports/`.
   to the tree, and each `[S#]` citation selects its source node.
 - **Runs**: every run in `reports/`, live or finished.
 
+## Market research
+
+```bash
+uv run research "NVIDIA stock" --template market                 # is X worth investing in?
+uv run research "pokemon cards as an investment" --template market
+uv run research "US tech stocks" --template market-trending      # what's moving now (last week)
+```
+
+`market` is for "is X worth investing in": stocks, funds, or alternative assets like
+collectibles. `market-trending` restricts search to the past week (`time_range`) and ranks
+what is moving and why. Both templates swap the whole lens, not just the wording:
+
+- **Jev** accepts filings, earnings reports, analyst notes, financial news, price-history pages,
+  and studies/backtests with a stated method. It rejects sponsored picks, hype posts and
+  undated predictions. Concepts are companies, tickers, funds, indices and named studies.
+- **Search** prefers SEC, Reuters, Bloomberg, FT, WSJ, Morningstar, SSRN and NBER (boosted,
+  not exclusive).
+- **The report** has bottom line → snapshot (every number with an as-of date) → bull case →
+  bear case and risks → historical performance and backtests (period, method, biases:
+  survivorship, look-ahead, fees) → what analysts and studies say → gaps and stale data.
+  It gives no buy/sell calls or price targets of its own, and ends with "This is research,
+  not financial advice."
+
+Every lens field can be overridden like any template field, e.g.
+`--set template.time_range=month` or `--set 'template.prefer_domains=["sec.gov"]'`.
+
 ## Starting template
 
-Stage 0 is a template, and you can edit it: intent, deliverable, tone, filter, and the seed
+Stage 0 is a template, and you can edit it: intent, deliverable, tone, filter, the seed
+plan, and the lens (`sources`, `avoid`, `concepts`, `draft_focus`, `report_outline`,
+`report_rules` separated by ` | `, `prefer_domains`, `time_range`). The seed
 plan (the facets Needle splits into queries when the drafter is off, and the fallback when
 it fails). Placeholders: `{topic}`, `{core}`, `{year}`, `{last_year}`, `{focus}`. The web UI
 has three starting points (research survey, engineering practice, gap hunt) and saves your
