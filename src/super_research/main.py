@@ -393,7 +393,7 @@ async def run(
 
     async def searxng(q: str):
         async with searx_sem:
-            results, dead = await searx.search(searx_http, settings.searx_url, q, settings.searx_engines, settings.budgets.results_per_query)
+            results, dead = await searx.search(searx_http, settings.searx_url, q, settings.template.searx_engines or settings.searx_engines, settings.budgets.results_per_query)
         search_log({"kind": "searxng", "query": q, "n": len(results), "unresponsive": dead})
         return results
 

@@ -115,6 +115,8 @@ class Template:
     # ("" | "day" | "week" | "month" | "year").
     prefer_domains: tuple[str, ...] = ()
     time_range: str = ""
+    # SearXNG engines for this template (empty = settings.searx_engines).
+    searx_engines: tuple[str, ...] = ()
 
 
 # --- starting templates -----------------------------------------------------------------

@@ -271,6 +271,7 @@ export function renderNew(main) {
       // Lens fields (sources, report outline, domains...) are kept when present.
       for (const k of ["sources", "avoid", "concepts", "draft_focus", "report_outline", "report_rules", "time_range"]) if (typeof t[k] === "string") clean[k] = t[k];
       if (Array.isArray(t.prefer_domains)) clean.prefer_domains = t.prefer_domains.map(String).slice(0, 40);
+      if (Array.isArray(t.searx_engines)) clean.searx_engines = t.searx_engines.map(String).slice(0, 20);
       const id = "u-" + Math.random().toString(36).slice(2, 9);
       saveTemplate({ id, name: String(data.name || "Imported").slice(0, 40), template: clean });
       loadTemplate(id);
