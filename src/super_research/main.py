@@ -28,11 +28,22 @@ import httpx
 from . import config as cfg
 from . import context, report, scraper, searx, tavily_client
 from .needle_client import problem_phrases
+from typesafe_sdk import (
+    TypeSafeAPIConnectionError,
+    TypeSafeAPITimeoutError,
+    TypeSafeInternalServerError,
+    TypeSafeRateLimitError,
+)
+
 from .jev_client import JEV_PRICE_PER_MTOK, JevBudgetExceeded, JevJudge, StubJudge
 from .schemas import Node
 from .tree_manager import KnowledgeTree, normalize_url
 
 log = logging.getLogger("research")
+
+# Worth skipping one decision for; auth / bad-request errors are not and still raise.
+TRANSIENT_JEV_ERRORS = (TypeSafeAPIConnectionError, TypeSafeAPITimeoutError, TypeSafeInternalServerError, TypeSafeRateLimitError)
+JEV_MAX_FAILURES = 5
 
 SearchFn = Callable[[str], Awaitable[list[searx.SearchResult]]]
 FetchFn = Callable[[str], Awaitable[scraper.Page]]
@@ -92,6 +103,7 @@ class Researcher:
         self.stop_reason: str | None = None
         self.timings: dict[str, float] = {}
         self.stage = "starting"  # read by the live UI
+        self.jev_failures = 0  # consecutive transient Jev errors
         self.emit: Callable[..., None] = plain_emit  # the rich UI swaps this out
         # Pages a search backend already fetched (Tavily raw content), keyed by node id.
         self.prefetched: dict[str, scraper.Page] = {}
@@ -109,12 +121,21 @@ class Researcher:
         return self.stop_reason is not None or self.out_of_time()
 
     async def _guard(self, coro):
-        """Budget exhaustion stops gathering but keeps what was collected."""
+        """Budget exhaustion stops gathering but keeps what was collected. A transient Jev
+        failure skips this one decision; JEV_MAX_FAILURES in a row stop gathering."""
         try:
-            return await coro
+            result = await coro
         except JevBudgetExceeded as e:
             self.stop_reason = self.stop_reason or str(e)
             return None
+        except TRANSIENT_JEV_ERRORS as e:
+            self.jev_failures += 1
+            log.warning("jev call failed (%d in a row): %s", self.jev_failures, e)
+            if self.jev_failures >= JEV_MAX_FAILURES:
+                self.stop_reason = self.stop_reason or f"Jev unreachable ({self.jev_failures} failures in a row)"
+            return None
+        self.jev_failures = 0
+        return result
 
     # --- stage 1-2 --------------------------------------------------------------
 

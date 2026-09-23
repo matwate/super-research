@@ -221,3 +221,24 @@ def test_web_template():
     assert "academic paper" in ctx.avoid and "forum" in ctx.sources
     assert "How it evolved" in ctx.report_outline
     assert "hackernews" in s.template.searx_engines and "news.ycombinator.com" in s.template.prefer_domains
+
+
+async def test_transient_jev_errors_skip_then_stop(tmp_path):
+    from typesafe_sdk import TypeSafeAPIConnectionError
+
+    s = config.load("standard", None, {})
+    ctx = context.build("gradient surgery")
+    search_fn, fetch_fn = fake_web()
+    r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn)
+
+    async def down():
+        raise TypeSafeAPIConnectionError("All connection attempts failed")
+
+    async def up():
+        return 0.9
+
+    assert await r._guard(down()) is None and r.stop_reason is None
+    assert await r._guard(up()) == 0.9 and r.jev_failures == 0
+    for _ in range(5):
+        await r._guard(down())
+    assert r.stop_reason and "Jev unreachable" in r.stop_reason
