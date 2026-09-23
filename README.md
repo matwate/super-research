@@ -2,7 +2,7 @@
 
 A research agent that spends on one expensive model call per pass. Small models do the
 routing: Needle 3 (local) drafts queries and pulls out named concepts, and Jev (TypeSafe)
-makes every keep/skip decision. SearXNG searches. One OpenCode Go LLM call writes the report
+makes every keep/skip decision. Tavily and SearXNG search. One OpenCode Go LLM call writes the report
 from a **knowledge tree** of everything the pass found.
 
 ```bash
@@ -12,8 +12,14 @@ uv run research "gradient surgery" --focus "multi-task learning" --focus PCGrad 
 
 Output: `reports/<slug>/<timestamp>/report.md`, plus the debugging artifacts below.
 
-Needs `TYPESAFE_API_KEY` and `OPENCODE_API_KEY` in the environment. Needle downloads its
-engine and weights (~35 MB) from Hugging Face the first time it runs.
+Needs `TYPESAFE_API_KEY` and `OPENCODE_API_KEY` in the environment; `TAVILY_API_KEY` is
+optional but strongly recommended. Needle downloads its engine and weights (~35 MB) from
+Hugging Face the first time it runs.
+
+On a terminal you get a live dashboard: current stage, page budget per depth, pages as Jev
+scores them, concept expansions, and running Jev/Tavily spend. At the end it prints the
+knowledge tree and a cost table. Pass `--plain` for plain log lines (automatic when stderr
+isn't a TTY).
 
 ## Pipeline
 
@@ -22,9 +28,9 @@ engine and weights (~35 MB) from Hugging Face the first time it runs.
 | 0 | template | topic → intent / deliverable / filter block, plus a facet plan (`survey`, `benchmark comparison`, `arxiv`, …) |
 | 1 | Needle | splits the plan into grammar-constrained `search_web` calls (retried once per chunk, template fallback) |
 | 2 | Jev | one Noul per query: run or skip |
-| 3 | SearXNG | `search.matwa.dev`, engines configurable, results deduped by URL |
+| 3 | Tavily + SearXNG | both backends queried in parallel and merged by URL. Tavily returns page text, so those pages skip scraping |
 | 4 | Jev | one Noul per result, bundled per query: scrape or skip |
-| 5 | scraper | main text + in-content anchors, capped per page |
+| 5 | scraper | main text + in-content anchors, capped per page. arXiv is read from `/html/` (full paper), and Tavily extract is the fallback for bot walls and JS-only pages |
 | 6 | Jev | page-content Noul (the stop signal), then one Noul per anchor: delve or not; recurse by depth |
 | ↻ | Needle + Jev | **concept expansion**: named methods/datasets on good pages → Jev gate → new queries hung off the page that mentioned them → back to 3 |
 | 7 | OpenCode Go | one call sees intent, queries, the rendered tree, and page text by relevance, and writes the report |
@@ -62,6 +68,8 @@ uv run research "..." --gate delve=0.6 --gate relevance=0.45
 uv run research "..." --set budgets.expansion_rounds=2 --set concurrency=4
 uv run research "..." --model glm-5.3                   # any OpenCode Go model id
 uv run research "..." --no-report                       # gather only, no LLM spend
+uv run research "..." --set 'search_backends=["searxng"]'       # free search only
+uv run research "..." --set tavily_depth=basic          # 1 credit per search instead of 2
 uv run research --print-config --preset deep
 ```
 
@@ -73,6 +81,7 @@ uv run research --print-config --preset deep
 | `tree.md` / `tree.json` | full knowledge tree, including pruned nodes and their scores |
 | `jev_verdicts.jsonl` | every Jev call: kind, items, probabilities, tokens, latency |
 | `needle_drafts.jsonl` | every Needle call: input, calls, confidence, reasoning |
+| `search.jsonl` | every Tavily / SearXNG call: query, URLs, credits, dead engines |
 | `context_prompt.txt` | stage-0 block and the Needle plan |
 | `report_prompt.txt` | the exact prompt sent to the final LLM |
 | `pages/` | extracted text of every scraped page |
@@ -88,8 +97,14 @@ delves whose content Jev then scored as relevant (target ≥ 0.7).
   come from concept expansion. For ambiguous topics, add `--focus` terms or `--intent`.
 - Term extraction merges Needle spans (from the most name-dense paragraphs; long inputs make
   it refuse) with regex candidates. Jev's concept gate does the selecting.
-- On this SearXNG instance, DuckDuckGo, Brave, Startpage and Google are captcha'd or empty.
-  The default engines are `bing, google scholar, crossref, arxiv, semantic scholar`.
-- Bot walls and JS-only pages count as failed fetches and don't use up page budget.
-  FlareSolverr isn't wired in.
+- Search backends: `search_backends = ["auto"]` means Tavily + SearXNG when `TAVILY_API_KEY`
+  is set, otherwise SearXNG only. Tavily uses `advanced` depth and prefers academic domains
+  (arxiv, openreview, NeurIPS, PMLR, ACL, GitHub) without excluding others. That's what makes
+  ambiguous topics like "gradient surgery" work. It costs about $0.15 per quick pass at
+  pay-as-you-go rates (estimate: $0.008/credit; check your plan).
+- On this SearXNG instance, DuckDuckGo, Brave, Startpage and Google are captcha'd or empty,
+  and Google Scholar gets suspended under repeated use. The default engines are
+  `bing, google scholar, crossref, arxiv, semantic scholar`.
+- Bot walls and JS-only pages go to Tavily extract. If that also fails, they count as failed
+  fetches and don't use up page budget.
 - Tests run offline with stub Jev/Needle: `uv run pytest`.
