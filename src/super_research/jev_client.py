@@ -37,36 +37,57 @@ class Judge(Protocol):
     async def gate_problems(self, research: dict, problems: list[tuple[str, int]]) -> list[float]: ...
 
 
-# Criteria are spelled out because Jev reads questions literally.
-_Q_QUERY = NoulCriteria(
-    true="The query is specific enough to return papers, benchmarks, results or technical writeups that serve `research.intent`.",
-    false="The query is off-topic, too vague to return useful sources, targets content excluded by `research.filter`, or asks for the same thing as an entry in `already_searched`.",
-)
-_Q_RESULT = NoulCriteria(
-    true="The title, snippet and URL indicate a research paper, benchmark, survey, technical blog post, or documentation about the research topic.",
-    false="Off-topic, a product or marketing page, a shallow or beginner tutorial, a listing page with no content of its own, or content excluded by `research.filter`.",
-)
-_Q_PAGE = NoulCriteria(
-    true="The text discusses the research topic with substance: methods, results, comparisons, analysis, or technical detail.",
-    false="The text is off-topic, mostly navigation or boilerplate, a paywall or error page, or only mentions the topic in passing.",
-)
-_Q_LINK = NoulCriteria(
-    true="The link text or URL points to a related paper, method, benchmark, dataset, code repository, or in-depth technical writeup on the research topic.",
-    false="Navigation, site chrome, an author or profile page, a generic listing, an ad or product, or an unrelated topic.",
-)
-_Q_CONCEPT = NoulCriteria(
-    true="A specific named method, algorithm, model, dataset, or benchmark that is part of the research topic.",
-    false="A broad field or discipline name (such as Machine Learning or Computer Vision), a generic phrase, a sentence fragment, a citation fragment such as an author name and year, or something unrelated to the research topic.",
-)
+# Criteria are spelled out because Jev reads questions literally. The source-shaped parts
+# come from the template's lens (config.Template.sources / avoid / concepts), so a market
+# research pass accepts filings and analyst coverage instead of rejecting them as "not papers".
+DEFAULT_LENS = {
+    "sources": "a research paper, benchmark, survey, technical blog post, code repository, or documentation",
+    "avoid": "a product or marketing page, a shallow or beginner tutorial, a listing page with no content of its own",
+    "concepts": "method, algorithm, model, dataset, or benchmark",
+}
 
-_Q_PROBLEM = NoulCriteria(
-    true="A concrete technical difficulty within the research topic, such as a training pathology, numerical issue, data limitation, or modeling challenge, specific enough to be the subject of a paper.",
-    false="A vague or generic phrase, a difficulty unrelated to the research topic, or everyday wording that happens to contain a problem word.",
-)
+
+def criteria(lens: dict | None = None) -> dict[str, NoulCriteria]:
+    lens = {**DEFAULT_LENS, **{k: v for k, v in (lens or {}).items() if v}}
+    return {
+        "query": NoulCriteria(
+            true=f"The query is specific enough to return {lens['sources']} that serves `research.intent`.",
+            false="The query is off-topic, too vague to return useful sources, targets content excluded by `research.filter`, or asks for the same thing as an entry in `already_searched`.",
+        ),
+        "result": NoulCriteria(
+            true=f"The title, snippet and URL indicate {lens['sources']} about the research topic.",
+            false=f"Off-topic, {lens['avoid']}, or content excluded by `research.filter`.",
+        ),
+        "page": NoulCriteria(
+            true="The text discusses the research topic with substance: data, results, comparisons, analysis, or technical detail.",
+            false="The text is off-topic, mostly navigation or boilerplate, a paywall or error page, or only mentions the topic in passing.",
+        ),
+        "link": NoulCriteria(
+            true=f"The link text or URL points to {lens['sources']} on the research topic.",
+            false="Navigation, site chrome, an author or profile page, a generic listing, an ad, or an unrelated topic.",
+        ),
+        "concept": NoulCriteria(
+            true=f"A specific named {lens['concepts']} that is part of the research topic.",
+            false="A broad field or discipline name (such as Machine Learning or Finance), a generic phrase, a sentence fragment, a citation fragment such as an author name and year, or something unrelated to the research topic.",
+        ),
+        "problem": NoulCriteria(
+            true="A concrete difficulty or risk within the research topic, such as a training pathology, numerical issue, data limitation, modeling challenge, or market risk, specific enough to be the subject of a focused study.",
+            false="A vague or generic phrase, a difficulty unrelated to the research topic, or everyday wording that happens to contain a problem word.",
+        ),
+    }
 
 
 class JevJudge:
-    def __init__(self, model: str, max_calls: int, log: Callable[[dict], None], concurrency: int = 8, api_key: str | None = None):
+    def __init__(
+        self,
+        model: str,
+        max_calls: int,
+        log: Callable[[dict], None],
+        concurrency: int = 8,
+        api_key: str | None = None,
+        lens: dict | None = None,
+    ):
+        self.q = criteria(lens)
         self.client = AsyncTypeSafeClient(model=model, api_key=api_key)
         self.max_calls = max_calls
         self.log = log
@@ -105,7 +126,7 @@ class JevJudge:
     async def gate_queries(self, research, queries, already):
         state = {"research": research, "candidate_queries": queries, "already_searched": already}
         qs = {
-            f"q{i}": Noul(instructions=f"Should the web search `candidate_queries[{i}]` be run to gather sources for `research`?", criteria=_Q_QUERY)
+            f"q{i}": Noul(instructions=f"Should the web search `candidate_queries[{i}]` be run to gather sources for `research`?", criteria=self.q["query"])
             for i in range(len(queries))
         }
         r = await self._nouls("gate_queries", state, qs, queries)
@@ -115,7 +136,7 @@ class JevJudge:
         items = [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results]
         state = {"research": research, "search_query": query, "results": items}
         qs = {
-            f"r{i}": Noul(instructions=f"Does the search result `results[{i}]` likely lead to a page with substantive content that serves `research.intent`?", criteria=_Q_RESULT)
+            f"r{i}": Noul(instructions=f"Does the search result `results[{i}]` likely lead to a page with substantive content that serves `research.intent`?", criteria=self.q["result"])
             for i in range(len(items))
         }
         r = await self._nouls("rate_results", state, qs, [i["url"] for i in items])
@@ -123,7 +144,7 @@ class JevJudge:
 
     async def page_relevance(self, research, page):
         state = {"research": research, "page": {"title": page.title, "url": page.url, "text": page.text}}
-        qs = {"p0": Noul(instructions="Does `page.text` contain substantive information that serves `research.intent`?", criteria=_Q_PAGE)}
+        qs = {"p0": Noul(instructions="Does `page.text` contain substantive information that serves `research.intent`?", criteria=self.q["page"])}
         r = await self._nouls("page_relevance", state, qs, [page.url])
         return r["p0"]
 
@@ -133,7 +154,7 @@ class JevJudge:
         links = [{"text": a.text, "url": a.url} for a in anchors]
         state = {"research": research, "page": {"title": page.title, "url": page.url}, "links": links}
         qs = {
-            f"l{i}": Noul(instructions=f"Would following `links[{i}]` from `page` likely lead to a source with substantive content that serves `research.intent`?", criteria=_Q_LINK)
+            f"l{i}": Noul(instructions=f"Would following `links[{i}]` from `page` likely lead to a source with substantive content that serves `research.intent`?", criteria=self.q["link"])
             for i in range(len(links))
         }
         r = await self._nouls("rate_links", state, qs, [a.url for a in anchors])
@@ -143,7 +164,7 @@ class JevJudge:
         items = [{"term": t, "mentioned_on_pages": n} for t, n in concepts]
         state = {"research": research, "concepts": items}
         qs = {
-            f"c{i}": Noul(instructions=f"Is `concepts[{i}].term` a specific named method, model, dataset or benchmark worth searching for to serve `research.intent`?", criteria=_Q_CONCEPT)
+            f"c{i}": Noul(instructions=f"Is `concepts[{i}].term` a specific named thing worth its own search to serve `research.intent`?", criteria=self.q["concept"])
             for i in range(len(items))
         }
         r = await self._nouls("gate_concepts", state, qs, [t for t, _ in concepts])
@@ -153,7 +174,7 @@ class JevJudge:
         items = [{"phrase": t, "mentioned_on_pages": n} for t, n in problems]
         state = {"research": research, "problems": items}
         qs = {
-            f"c{i}": Noul(instructions=f"Is `problems[{i}].phrase` a specific technical problem in `research.topic` worth a focused search for work that addresses it?", criteria=_Q_PROBLEM)
+            f"c{i}": Noul(instructions=f"Is `problems[{i}].phrase` a specific problem or risk in `research.topic` worth a focused search for work that addresses it?", criteria=self.q["problem"])
             for i in range(len(items))
         }
         r = await self._nouls("gate_problems", state, qs, [t for t, _ in problems])

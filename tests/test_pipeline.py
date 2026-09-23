@@ -178,3 +178,18 @@ def test_worth_extracting():
     assert worth_extracting(ScrapeError("too little text (blocked, JS-only, or empty)"))
     assert not worth_extracting(ScrapeError("HTTP 404"))
     assert not worth_extracting(ScrapeError("not html: application/pdf"))
+
+
+def test_template_lens_reaches_jev_drafter_and_report():
+    from super_research.config import Template
+    from super_research.jev_client import criteria
+    from super_research.report import system_prompt
+
+    t = Template(sources="an earnings report or SEC filing", concepts="company or ticker",
+                 report_outline="# <title>\n## Bull case\n## Bear case", report_rules="Date every number | No buy/sell calls")
+    ctx = context.build("NVDA", template=t)
+    q = criteria({"sources": ctx.sources, "concepts": ctx.concepts})
+    assert "SEC filing" in q["result"]["true"] and "company or ticker" in q["concept"]["true"]
+    assert "research paper" in criteria()["result"]["true"]  # defaults unchanged
+    sp = system_prompt(ctx)
+    assert "## Bull case" in sp and "- Date every number" in sp and "- No buy/sell calls" in sp

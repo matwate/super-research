@@ -23,6 +23,13 @@ class ResearchContext:
     tone: str
     filter: str
     facets: list[str] = field(default_factory=list)  # the search plan Needle splits into queries
+    # The lens (see config.Template): filled copies of the template's lens fields.
+    sources: str = ""
+    avoid: str = ""
+    concepts: str = ""
+    draft_focus: str = ""
+    report_outline: str = ""
+    report_rules: str = ""
 
     def as_state(self) -> dict:
         """What Jev sees as `research` in every question."""
@@ -79,6 +86,13 @@ def build(
         deliverable=fill(t.deliverable, values),
         tone=fill(t.tone, values),
         filter=fill(t.filter, values),
+        sources=fill(t.sources, values),
+        avoid=fill(t.avoid, values),
+        concepts=fill(t.concepts, values),
+        draft_focus=fill(t.draft_focus, values),
+        # The outline keeps its line breaks, so only placeholders are substituted.
+        report_outline=_PLACEHOLDER.sub(lambda m: values[m.group(1)], t.report_outline).strip(),
+        report_rules=fill(t.report_rules, values),
     )
     facets = [f"{f} {core}" for f in focus] + [fill(f, values) for f in t.facets]
     ctx.facets = list(dict.fromkeys(f for f in facets if f))

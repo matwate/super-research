@@ -20,7 +20,7 @@ from .report import PRICES, strip_reasoning
 
 PROMPT = """{context}
 
-Write {n} diverse web search queries that together cover this research: key methods and model families, known technical problems and failure modes, benchmarks and datasets, recent ({year}) work, surveys, and code. Use the field's own vocabulary and synonyms, and spell out acronyms in some queries. Each query 3-8 words, no quotes or search operators.
+Write {n} diverse web search queries that together cover this research: {focus}. Use the field's own vocabulary and synonyms, and spell out acronyms in some queries. Each query 3-8 words, no quotes or search operators.
 Return only JSON: {{"queries": ["..."]}}"""
 
 
@@ -53,7 +53,7 @@ async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, sess
     body = {
         "model": model,
         "max_tokens": 4000,  # reasoning models spend tokens thinking before the JSON
-        "messages": [{"role": "user", "content": PROMPT.format(context=ctx.render(), n=n, year=year)}],
+        "messages": [{"role": "user", "content": PROMPT.format(context=ctx.render(), n=n, focus=ctx.draft_focus)}],
     }
     headers = {"Authorization": f"Bearer {key}", "User-Agent": "super-research/0.1", "x-opencode-session": session_id}
     async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=15.0)) as client:

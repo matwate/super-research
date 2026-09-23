@@ -93,6 +93,28 @@ class Template:
         "{core} ablation study",
         "{core} review {last_year}",
     )
+    # --- the lens: what Jev, the drafter and the report LLM treat as useful ---------
+    # What a good source looks like (Jev result + link criteria).
+    sources: str = "a research paper, benchmark, survey, technical blog post, code repository, or documentation"
+    # What to reject besides `filter` (Jev result criteria).
+    avoid: str = "a product or marketing page, a shallow or beginner tutorial, a listing page with no content of its own"
+    # What counts as a named concept worth its own search (Jev concept gate).
+    concepts: str = "method, algorithm, model, dataset, or benchmark"
+    # What the seed queries should cover together (drafter prompt).
+    draft_focus: str = "key methods and model families, known technical problems and failure modes, benchmarks and datasets, recent ({year}) work, surveys, and code"
+    # Markdown outline of the report, and extra writing rules for the report LLM.
+    report_outline: str = """# <title>
+## Summary  (5-8 bullet points)
+## Methods landscape  (a comparison table: method, core idea, strengths, weaknesses, sources)
+## Empirical results  (benchmarks, datasets, reported numbers with citations; a table where possible)
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing  (gaps in the literature AND gaps in this search's coverage)
+## Sources  (S# - title - URL, one per line)"""
+    report_rules: str = ""
+    # Tavily: preferred domains (empty = settings.tavily_prefer_domains) and recency
+    # ("" | "day" | "week" | "month" | "year").
+    prefer_domains: tuple[str, ...] = ()
+    time_range: str = ""
 
 
 @dataclass(frozen=True)

@@ -29,8 +29,10 @@ class TavilySearch:
         token_budget: int,
         log: Callable[[dict], None],
         api_key: str | None = None,
+        time_range: str | None = None,
     ):
         self.client = AsyncTavilyClient(api_key=api_key)
+        self.time_range = time_range  # "day" | "week" | "month" | "year" | None
         self.depth = depth
         self.max_results = max_results
         self.prefer_domains = list(prefer_domains)
@@ -52,6 +54,7 @@ class TavilySearch:
             include_domains=self.prefer_domains or None,
             # "prefer" boosts these domains without excluding blogs, docs or repos elsewhere.
             include_domains_mode="prefer" if self.prefer_domains else None,
+            time_range=self.time_range,
             include_usage=True,
         )
         self.searches += 1

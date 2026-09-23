@@ -365,7 +365,8 @@ async def run(
     else:
         from .needle_client import NeedleClient
 
-        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency, api_key=keys.typesafe)
+        lens = {"sources": ctx.sources, "avoid": ctx.avoid, "concepts": ctx.concepts}
+        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency, api_key=keys.typesafe, lens=lens)
         needle = NeedleClient(needle_log)
 
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):  # needle's import resets these
@@ -383,10 +384,11 @@ async def run(
         tavily = tavily_client.TavilySearch(
             settings.tavily_depth,
             settings.tavily_max_results,
-            settings.tavily_prefer_domains,
+            settings.template.prefer_domains or settings.tavily_prefer_domains,
             settings.budgets.page_tokens,
             search_log,
             api_key=keys.tavily,
+            time_range=settings.template.time_range or None,
         )
 
     async def searxng(q: str):

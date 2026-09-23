@@ -37,16 +37,15 @@ OVERHEAD_TOKENS = 6_000  # instructions, tree outline, query list
 SYSTEM = """You write research reports from gathered sources. Rules:
 - Use only the SOURCES provided. Cite every factual claim inline as [S#]. Never invent citations, numbers, or results.
 - If sources disagree, say so and cite both. If something the intent asks for is not covered by the sources, say it is missing rather than filling it from memory; you may add clearly-labelled background ("Background, not from sources:") sparingly.
-- The KNOWLEDGE TREE shows how sources were found: which query surfaced them, which page linked to which, which concepts spawned follow-up searches. Use it to explain how the field connects (lineage of methods, which works build on which) and where coverage is thin.
-
+- The KNOWLEDGE TREE shows how sources were found: which query surfaced them, which page linked to which, which concepts spawned follow-up searches. Use it to explain how the field connects (which works build on which) and where coverage is thin.
+{rules}
 Structure (markdown):
-# <title>
-## Summary  (5-8 bullet points)
-## Methods landscape  (a comparison table: method, core idea, strengths, weaknesses, sources)
-## Empirical results  (benchmarks, datasets, reported numbers with citations; a table where possible)
-## How the pieces connect  (derived from the knowledge tree)
-## What is missing  (gaps in the literature AND gaps in this search's coverage)
-## Sources  (S# - title - URL, one per line)"""
+{outline}"""
+
+
+def system_prompt(ctx: ResearchContext) -> str:
+    rules = "".join(f"- {r.strip()}\n" for r in ctx.report_rules.split(" | ") if r.strip())
+    return SYSTEM.format(rules=rules, outline=ctx.report_outline)
 
 
 @dataclass
@@ -102,14 +101,14 @@ async def write(
 ) -> ReportResult:
     user, n_sources = assemble(ctx, tree, context_tokens)
     if prompt_path:
-        prompt_path.write_text(f"=== SYSTEM ===\n{SYSTEM}\n\n=== USER ===\n{user}")
+        prompt_path.write_text(f"=== SYSTEM ===\n{system_prompt(ctx)}\n\n=== USER ===\n{user}")
     key = api_key or os.environ.get("OPENCODE_API_KEY")
     if not key:
         raise RuntimeError("OPENCODE_API_KEY is not set")
     body = {
         "model": model,
         "max_tokens": max_output_tokens,
-        "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+        "messages": [{"role": "system", "content": system_prompt(ctx)}, {"role": "user", "content": user}],
     }
     headers = {
         "Authorization": f"Bearer {key}",
