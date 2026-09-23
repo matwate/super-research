@@ -191,7 +191,9 @@ class Researcher:
             if node is None:
                 continue
             node.score = p
-            if p >= self.g.relevance and len(r.content) >= 500:
+            # Search-backend text is used as is, except where we know a cleaner source
+            # (GitHub file pages are fetched raw instead; see canonical_fetch_url).
+            if p >= self.g.relevance and len(r.content) >= 500 and not node.url.startswith("https://raw.githubusercontent.com/"):
                 self.prefetched[node.id] = scraper.page_from_markdown(node.url, r.title, r.content, self.b.page_tokens)
             if p >= self.g.relevance:
                 self.tree.enqueue(node)

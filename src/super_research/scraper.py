@@ -184,7 +184,8 @@ async def fetch(client: httpx.AsyncClient, url: str, token_budget: int) -> Page:
             if resp.status_code >= 400:
                 raise ScrapeError(f"HTTP {resp.status_code}")
             ctype = resp.headers.get("content-type", "")
-            if "html" not in ctype and "xml" not in ctype:
+            plain = ctype.startswith(("text/plain", "text/markdown", "text/x-markdown"))
+            if "html" not in ctype and "xml" not in ctype and not plain:
                 raise ScrapeError(f"not html: {ctype or 'unknown'}")
             body = bytearray()
             async for chunk in resp.aiter_bytes():
@@ -195,7 +196,12 @@ async def fetch(client: httpx.AsyncClient, url: str, token_budget: int) -> Page:
             final = str(resp.url)
     except httpx.HTTPError as e:
         raise ScrapeError(f"{type(e).__name__}: {e}") from e
-    page = extract(html, final, token_budget)
+    if plain:  # raw files (e.g. a CHANGELOG.md from raw.githubusercontent.com)
+        name = urlsplit(final).path.rstrip("/").rsplit("/", 1)[-1]
+        repo = "/".join(urlsplit(final).path.strip("/").split("/")[:2])
+        page = page_from_markdown(final, f"{name} · {repo}" if repo else name, html, token_budget)
+    else:
+        page = extract(html, final, token_budget)
     if _BOT_WALL.search(page.title):
         raise ScrapeError(f"bot wall: {page.title}")
     if len(page.text) < 200:

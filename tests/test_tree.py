@@ -101,3 +101,11 @@ def test_redirect_to_known_url_is_a_duplicate():
     b = t.add_source("https://doi.org/10.1234/x", "b", a.id, "link", depth=2)
     assert t.resolve_redirect(b, "https://arxiv.org/abs/1v2") is a
     assert t.resolve_redirect(a, "https://arxiv.org/abs/1") is None
+
+
+def test_github_blob_fetched_raw_and_deduped():
+    blob = "https://github.com/openai/openai-python/blob/main/CHANGELOG.md"
+    raw = "https://raw.githubusercontent.com/openai/openai-python/main/CHANGELOG.md"
+    assert canonical_fetch_url(blob) == raw
+    assert normalize_url(blob) == normalize_url(raw) == "github.com/openai/openai-python/blob/main/CHANGELOG.md"
+    assert canonical_fetch_url("https://github.com/openai/openai-python") == "https://github.com/openai/openai-python"

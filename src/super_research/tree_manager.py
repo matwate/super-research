@@ -36,6 +36,9 @@ def normalize_url(url: str) -> str:
     parts = urlsplit(url.strip())
     host = parts.netloc.lower().removeprefix("www.")
     path = parts.path or "/"
+    if host == "raw.githubusercontent.com":  # same file as its github.com/.../blob/... page
+        owner, repo, rest = (path.lstrip("/").split("/", 2) + ["", ""])[:3]
+        host, path = "github.com", f"/{owner}/{repo}/blob/{rest}"
     if host in ("doi.org", "dx.doi.org") and (m := _ARXIV_DOI.match(path)):
         host, path = "arxiv.org", f"/abs/{m.group(1)}"
     if host.endswith("arxiv.org"):
@@ -48,9 +51,15 @@ def normalize_url(url: str) -> str:
     return urlunsplit(("", host, path, query, "")).removeprefix("//")
 
 
+_GH_BLOB = re.compile(r"^/([^/]+)/([^/]+)/blob/(.+)$")
+
+
 def canonical_fetch_url(url: str) -> str:
-    """URL to actually fetch: arXiv PDFs become abstract pages (PDFs are out of scope)."""
+    """URL to actually fetch: arXiv PDFs become abstract pages (PDFs are out of scope), and
+    GitHub file pages become their raw file (the rendered page is mostly GitHub chrome)."""
     parts = urlsplit(url)
+    if parts.netloc.lower().removeprefix("www.") == "github.com" and (m := _GH_BLOB.match(parts.path)):
+        return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}"
     if parts.netloc.lower().endswith("arxiv.org") and (m := _ARXIV_PDF.match(parts.path)):
         return f"https://arxiv.org/abs/{m.group(1)}"
     return urlunsplit((parts.scheme or "https", parts.netloc, parts.path, parts.query, ""))
