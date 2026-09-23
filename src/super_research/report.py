@@ -24,6 +24,10 @@ PRICES = {
     "minimax-m3": (0.30, 1.20),
     "gpt-5.6-luna": (0.20, 1.20),
     "mimo-v2.6-pro": (0.435, 0.87),
+    "glm-5.3-flash": (0.15, 0.50),
+    "mimo-v2.6-flash": (0.14, 0.28),
+    "deepseek-v4-flash": (0.15, 0.60),  # off-peak; peak (01-04, 06-10 UTC weekdays) is 2x
+    "qwen3.8-flash": (0.15, 0.47),
 }
 # Reasoning some models inline in the content; an unclosed block means the answer never came.
 _THINK = re.compile(r"<(think|thinking|reasoning)>.*?(</\1>|\Z)", re.S | re.I)

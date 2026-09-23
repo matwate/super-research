@@ -95,6 +95,9 @@ class Settings:
     searx_concurrency: int = 2
     jev_model: str = "jev-latest"
     report_model: str = "minimax-m3"
+    # Drafts the seed queries (stage 1). Picked on quality in a 4-way test; all flash
+    # models cost ~$0.0001 per pass. "" = skip it and use the template facets.
+    draft_model: str = "glm-5.3-flash"
     opencode_url: str = "https://opencode.ai/zen/go/v1"
     concurrency: int = 8
     reports_dir: Path = Path("reports")

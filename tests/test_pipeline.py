@@ -6,6 +6,7 @@ from super_research import config, context
 from super_research.jev_client import StubJudge
 from super_research.main import Researcher, build_overrides, main, run
 from super_research.needle_client import StubNeedle, clean_terms, problem_phrases
+from super_research.drafter import parse as parse_draft
 from super_research.report import assemble, strip_reasoning
 from super_research.scraper import extract
 from super_research.searx import SearchResult
@@ -136,3 +137,9 @@ def test_strip_reasoning():
     assert strip_reasoning("<think>plan the report\nsources...</think>\n\n# Title\nbody") == "# Title\nbody"
     assert strip_reasoning("# Title\nno reasoning") == "# Title\nno reasoning"
     assert strip_reasoning("<think>never finished") == ""
+
+
+def test_parse_draft():
+    text = '<think>hmm</think>Sure:\n```json\n{"queries": ["PINN SEIR", "PINN SEIR", " stiff ODE PINN ", 3, ""]}\n```'
+    assert parse_draft(text, 10) == ["PINN SEIR", "stiff ODE PINN"]
+    assert parse_draft("no json here", 10) == []
