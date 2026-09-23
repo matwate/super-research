@@ -143,3 +143,27 @@ def test_parse_draft():
     text = '<think>hmm</think>Sure:\n```json\n{"queries": ["PINN SEIR", "PINN SEIR", " stiff ODE PINN ", 3, ""]}\n```'
     assert parse_draft(text, 10) == ["PINN SEIR", "stiff ODE PINN"]
     assert parse_draft("no json here", 10) == []
+
+
+async def test_seed_queries_use_drafter_then_fallback(tmp_path):
+    from super_research.drafter import Draft
+
+    s = config.load("standard", None, {"budgets": {"seed_queries": 4}})
+    ctx = context.build("gradient surgery")
+    search_fn, fetch_fn = fake_web()
+
+    async def good(c, n):
+        return Draft(["PCGrad multi-task conflicting gradients", "gradient surgery survey"], "glm-5.3-flash", 100, 50, 0.0001)
+
+    r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn, good)
+    await r.seed_queries()
+    assert {q.label for q in r.tree.of("query")} == {"PCGrad multi-task conflicting gradients", "gradient surgery survey"}
+    assert all(q.via == "llm_seed" for q in r.tree.of("query"))
+
+    async def broken(c, n):
+        raise RuntimeError("503")
+
+    r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn, broken)
+    await r.seed_queries()
+    assert [q.label for q in r.tree.of("query")] == ctx.facets[:4]
+    assert all(q.via == "needle_seed" for q in r.tree.of("query"))

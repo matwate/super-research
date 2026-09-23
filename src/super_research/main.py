@@ -50,7 +50,8 @@ class JsonlLog:
 def plain_emit(kind: str, **kw) -> None:
     """Pipeline events as log lines (used with --plain or when not on a TTY)."""
     if kind == "seeds":
-        log.info("needle drafted %d queries (%s)", len(kw["drafts"]), kw["source"])
+        who = "llm" if kw["source"].startswith("llm") else "needle"
+        log.info("%s drafted %d queries (%s)", who, len(kw["drafts"]), kw["source"])
     elif kind == "gate":
         log.info("jev kept %d/%d queries: %s", len(kw["ran"]), kw["total"], [n.label for n in kw["ran"]])
     elif kind == "frontier":
@@ -72,6 +73,7 @@ class Researcher:
         needle,
         search_fn: SearchFn,
         fetch_fn: FetchFn,
+        draft_fn=None,  # async (ctx, n) -> drafter.Draft; None = template facets via Needle
     ):
         self.ctx = ctx
         self.s = settings
@@ -82,6 +84,8 @@ class Researcher:
         self.needle = needle
         self.search_fn = search_fn
         self.fetch_fn = fetch_fn
+        self.draft_fn = draft_fn
+        self.draft = None  # drafter.Draft of this run, for costs
         self.tree = KnowledgeTree(ctx.topic, self.b, self.g)
         self.research = ctx.as_state()
         self.deadline = time.monotonic() + self.b.max_seconds
@@ -115,11 +119,22 @@ class Researcher:
     # --- stage 1-2 --------------------------------------------------------------
 
     async def seed_queries(self) -> list[Node]:
-        self.stage = "1 · Needle drafts queries"
-        drafts, source = await self.needle.draft_queries(self.ctx.needle_prompts(self.b.seed_queries))
+        drafts: list[str] = []
+        via = "llm_seed"
+        if self.draft_fn:
+            self.stage = "1 · LLM drafts queries"
+            try:
+                self.draft = await self.draft_fn(self.ctx, self.b.seed_queries)
+                drafts, source = self.draft.queries, f"llm {self.draft.model}"
+            except Exception as e:  # any drafter failure falls back to the template plan
+                log.warning("query drafter failed, using template facets: %s", e)
+        if not drafts:
+            self.stage = "1 · Needle splits the template plan"
+            drafts, source = await self.needle.draft_queries(self.ctx.needle_prompts(self.b.seed_queries))
+            via = "needle_seed"
         self.emit("seeds", drafts=drafts, source=source)
         self.tree.root.data["seed_source"] = source
-        nodes = [n for q in drafts[: self.b.seed_queries] if (n := self.tree.add_query(q, self.tree.root.id, "needle_seed"))]
+        nodes = [n for q in drafts[: self.b.seed_queries] if (n := self.tree.add_query(q, self.tree.root.id, via))]
         already = [n.label for n in self.tree.of("query", "ran")]
         self.stage = "2 · Jev gates queries"
         scores = await self._guard(self.judge.gate_queries(self.research, [n.label for n in nodes], already))
@@ -414,7 +429,14 @@ async def run(
             return page
 
     log.info("search backends: %s", ", ".join(use))
-    r = Researcher(ctx, settings, run_dir, judge, needle, search_fn, fetch_fn)
+    draft_fn = None
+    if settings.draft_model and not settings.offline:
+        from . import drafter
+
+        async def draft_fn(c, n):
+            return await drafter.draft(c, n, base_url=settings.opencode_url, model=settings.draft_model, session_id=run_id, year=dt.date.today().year)
+
+    r = Researcher(ctx, settings, run_dir, judge, needle, search_fn, fetch_fn, draft_fn)
     if ui:
         ui.attach(r, judge, tavily)
     result = None
@@ -461,6 +483,7 @@ async def run(
         jev_cost = judge.input_tokens * JEV_PRICE_PER_MTOK / 1e6
         tavily_cost = tavily.usd if tavily else 0.0
         llm_cost = result.cost_usd if result else 0.0
+        draft_cost = (r.draft.cost_usd or 0.0) if r.draft else 0.0
         summary: dict[str, Any] = {
             "topic": topic,
             "run_id": run_id,
@@ -470,6 +493,7 @@ async def run(
             "tree": r.tree.stats(),
             "jev": {"calls": judge.calls, "input_tokens": judge.input_tokens, "cost_usd": round(jev_cost, 5)},
             "needle": {"calls": getattr(needle, "calls", 0), "seed_source": r.tree.root.data.get("seed_source")},
+            "drafter": dataclasses.asdict(r.draft) if r.draft else None,
             "search": {
                 "backends": use,
                 "tavily_credits": tavily.credits if tavily else 0,
@@ -478,7 +502,7 @@ async def run(
                 "tavily_usd": round(tavily_cost, 4),
             },
             "report": dataclasses.asdict(result) | {"markdown": None} if result else None,
-            "cost_usd_total": round(jev_cost + tavily_cost + (llm_cost or 0.0), 4) if llm_cost is not None else None,
+            "cost_usd_total": round(jev_cost + tavily_cost + draft_cost + (llm_cost or 0.0), 4) if llm_cost is not None else None,
             "settings": json.loads(json.dumps(dataclasses.asdict(settings), default=str)),
         }
         (run_dir / "run.json").write_text(json.dumps(summary, indent=2, default=str))

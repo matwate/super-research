@@ -86,7 +86,8 @@ class LiveUI:
     def event(self, kind: str, **kw) -> None:
         p = console.print
         if kind == "seeds":
-            p(f"[cyan]◆ needle[/] drafted {len(kw['drafts'])} queries [dim]({kw['source']})[/]")
+            who = "llm" if kw["source"].startswith("llm") else "needle"
+            p(f"[cyan]◆ {who}[/] drafted {len(kw['drafts'])} queries [dim]({kw['source']})[/]")
         elif kind == "gate":
             ran = kw["ran"]
             p(f"[magenta]◆ jev[/] kept {len(ran)}/{kw['total']} queries")
@@ -153,7 +154,7 @@ def knowledge_tree(tree, max_children: int = 12) -> Tree:
 
     def label(n) -> str:
         if n.kind == "query":
-            via = {"needle_seed": "seed", "needle_concept": "concept", "problem_concept": "problem"}.get(n.via, n.via)
+            via = {"llm_seed": "seed", "needle_seed": "seed", "needle_concept": "concept", "problem_concept": "problem"}.get(n.via, n.via)
             return f"[blue]🔎 {escape(n.label)}[/] [dim]{n.score:.2f} · {via}[/]"
         if n.kind == "concept":
             if n.data.get("kind") == "problem":
@@ -188,6 +189,9 @@ def summary(run_dir: Path, s: dict, tree=None) -> None:
     t.add_row("pages per depth", " / ".join(f"{a}/{b}" for a, b in zip(tr["pages_per_depth_spent"], tr["pages_per_depth_budget"])))
     dp = tr["delve_precision"]
     t.add_row("delve precision", f"[{'green' if dp and dp >= 0.7 else 'yellow'}]{dp}[/] ({tr['delved_pages']} delved)" if dp is not None else "—")
+    if s.get("drafter"):
+        d = s["drafter"]
+        t.add_row("query drafter", f"{d['model']} · ${d['cost_usd'] or 0:.5f}")
     t.add_row("jev", f"{s['jev']['calls']} calls · ${s['jev']['cost_usd']:.4f}")
     if s["search"]["tavily_credits"]:
         t.add_row("tavily", f"{s['search']['tavily_credits']} credits · ${s['search']['tavily_usd']:.3f}")
