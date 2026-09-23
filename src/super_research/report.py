@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -24,6 +25,8 @@ PRICES = {
     "gpt-5.6-luna": (0.20, 1.20),
     "mimo-v2.6-pro": (0.435, 0.87),
 }
+# Reasoning some models inline in the content; an unclosed block means the answer never came.
+_THINK = re.compile(r"<(think|thinking|reasoning)>.*?(</\1>|\Z)", re.S | re.I)
 MIN_PAGE_RELEVANCE = 0.3  # pages Jev judged near-empty for the topic are left out
 OVERHEAD_TOKENS = 6_000  # instructions, tree outline, query list
 
@@ -127,10 +130,14 @@ async def write(
     tin, tout = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     price = PRICES.get(model)
     cost = (tin * price[0] + tout * price[1]) / 1e6 if price else None
-    text = (choice["message"].get("content") or "").strip()
+    text = strip_reasoning(choice["message"].get("content") or "")
     if not text:
         raise RuntimeError(f"empty report (finish_reason={choice.get('finish_reason')}); raise report_max_output_tokens")
     return ReportResult(text, data.get("model", model), tin, tout, cost, choice.get("finish_reason", ""), n_sources)
+
+
+def strip_reasoning(text: str) -> str:
+    return _THINK.sub("", text).strip()
 
 
 def offline_report(ctx: ResearchContext, tree: KnowledgeTree, context_tokens: int) -> ReportResult:

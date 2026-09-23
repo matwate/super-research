@@ -6,7 +6,7 @@ from super_research import config, context
 from super_research.jev_client import StubJudge
 from super_research.main import Researcher, build_overrides, main, run
 from super_research.needle_client import StubNeedle, clean_terms, problem_phrases
-from super_research.report import assemble
+from super_research.report import assemble, strip_reasoning
 from super_research.scraper import extract
 from super_research.searx import SearchResult
 
@@ -130,3 +130,9 @@ def test_cli_overrides():
 def test_print_config(capsys):
     main(["--print-config", "--pages", "4,2"])
     assert json.loads(capsys.readouterr().out)["budgets"]["pages_per_depth"] == [4, 2]
+
+
+def test_strip_reasoning():
+    assert strip_reasoning("<think>plan the report\nsources...</think>\n\n# Title\nbody") == "# Title\nbody"
+    assert strip_reasoning("# Title\nno reasoning") == "# Title\nno reasoning"
+    assert strip_reasoning("<think>never finished") == ""
