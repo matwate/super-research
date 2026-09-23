@@ -242,3 +242,33 @@ async def test_transient_jev_errors_skip_then_stop(tmp_path):
     for _ in range(5):
         await r._guard(down())
     assert r.stop_reason and "Jev unreachable" in r.stop_reason
+
+
+def test_strip_nav_keeps_content_drops_sidebar():
+    from super_research.scraper import page_from_markdown, strip_nav
+
+    md = """[![OpenAI Developers](/logo.svg) ChatGPT](/)
+
+API Dashboard
+
+## Search the API docs
+
+### Suggested
+
+* [Home](/api/docs)
+* [Quickstart](/api/docs/quickstart)
+
+# Deprecations
+
+On 2025-08-26 we deprecated the Assistants API; it shuts down on 2026-08-26. Migrate to the [Responses API](https://x.dev/responses).
+
+```python
+client.responses.create(model="gpt-5")
+```
+"""
+    out = strip_nav(md)
+    assert "Quickstart" not in out and "API Dashboard" not in out and "Suggested" not in out
+    assert "# Deprecations" in out and "Assistants API" in out and "client.responses.create" in out
+    page = page_from_markdown("https://x.dev/deprecations", "Deprecations", md, 1000)
+    assert page.text.startswith("# Deprecations")
+    assert [a.url for a in page.anchors] == ["https://x.dev/responses"]

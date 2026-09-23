@@ -127,6 +127,45 @@ def _anchor(base_url: str, href: str, label: str) -> Anchor | None:
 _MD_LINK = re.compile(r"(?<!!)\[([^\]]{1,200})\]\((https?://[^)\s]+)\)")
 
 
+_ANY_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_HEADING = re.compile(r"^#{1,6}\s")
+
+
+def strip_nav(md: str) -> str:
+    """Drop site chrome from page markdown: lines that are only links (menus, sidebars,
+    breadcrumbs), images, bare 1-2 word labels ("Docs", "Try ChatGPT"), and headings left
+    with no content under them. Fenced code blocks pass through untouched."""
+    kept: list[str] = []
+    in_code = False
+    for line in md.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+            kept.append(line)
+            continue
+        if in_code:
+            kept.append(line)
+            continue
+        if not stripped:
+            kept.append("")
+            continue
+        prose = _ANY_LINK.sub("", stripped).strip(" *-+|>•·:,/")
+        if not prose:  # link-only or image-only line
+            continue
+        if not _HEADING.match(stripped) and len(prose.split()) <= 2 and not prose.endswith((".", ":", "?", "!")):
+            continue
+        kept.append(line)
+    # Headings directly followed by another heading (or nothing) were nav section titles.
+    out: list[str] = []
+    for i, line in enumerate(kept):
+        if _HEADING.match(line.strip()):
+            nxt = next((k.strip() for k in kept[i + 1 :] if k.strip()), "")
+            if not nxt or _HEADING.match(nxt):
+                continue
+        out.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
 def page_from_markdown(url: str, title: str, md: str, token_budget: int) -> Page:
     """A page from text a search/extract API already fetched (e.g. Tavily raw content).
     Markdown links become anchors so delving works the same as for scraped HTML."""
@@ -134,7 +173,7 @@ def page_from_markdown(url: str, title: str, md: str, token_budget: int) -> Page
     for label, href in _MD_LINK.findall(md):
         if anchor := _anchor(url, href, _clean(label)):
             anchors.setdefault(anchor.url, anchor)
-    text = _clean(_MD_LINK.sub(r"\1", md))
+    text = _clean(_ANY_LINK.sub(r"\1", strip_nav(md)))
     limit = token_budget * CHARS_PER_TOKEN
     return Page(url=url, title=title[:200], text=text[:limit], anchors=list(anchors.values()), truncated=len(text) > limit)
 
