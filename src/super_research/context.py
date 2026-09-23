@@ -69,7 +69,7 @@ def build(
 ) -> ResearchContext:
     t = template or Template()
     topic = " ".join(topic.split())
-    core = " ".join(_FILLER.sub(" ", topic).split()) or topic
+    core = " ".join(_FILLER.sub(" ", topic).split()).rstrip("?!. ") or topic
     year = (today or dt.date.today()).year
     focus = [f.strip() for f in focus or [] if f.strip()]
     values = {

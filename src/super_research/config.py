@@ -239,9 +239,79 @@ MARKET_TRENDING = Template(
     **_MARKET_LENS,
 )
 
+# General web: articles, blog posts, docs, changelogs and forum threads, no papers. For
+# practitioner questions like "how has calling AI models from Python evolved?".
+WEB = Template(
+    intent=(
+        "answer {topic}{focus} from articles, blog posts, official docs and changelogs, and forum discussions"
+        " (Hacker News, Reddit, Stack Overflow, GitHub), including how things changed over time and the {year} state."
+    ),
+    deliverable=(
+        "a clear answer with a dated timeline of how things changed, the current options compared, what"
+        " practitioners agree and disagree on, and common pitfalls, plus what is missing."
+    ),
+    tone="practical and precise, like a well-sourced long-form blog post",
+    filter="skip academic papers, SEO content farms, auto-generated listicles, and marketing pages.",
+    facets=(
+        "{core}",
+        "{core} blog",
+        "{core} guide {year}",
+        "{core} history timeline",
+        "{core} changelog release notes",
+        "{core} comparison",
+        "{core} hacker news discussion",
+        "{core} reddit",
+        "{core} stack overflow",
+        "{core} {last_year} vs {year}",
+    ),
+    sources=(
+        "an article or blog post by a practitioner, official documentation, a changelog or release notes, a"
+        " substantive forum or discussion thread (Hacker News, Reddit, Stack Overflow, GitHub issues or"
+        " discussions), a newsletter, or a talk writeup"
+    ),
+    avoid=(
+        "an academic paper, an SEO content farm or auto-generated listicle, a marketing or pricing page, or a"
+        " page with no content of its own"
+    ),
+    concepts="library, framework, tool, API, product, version, standard, or named technique",
+    draft_focus=(
+        "how the topic changed over the years (key releases and turning points), today's main options and how"
+        " they compare, practitioner opinions in forums and blogs, official docs and changelogs, and common"
+        " pitfalls, with the most recent ({year}) state"
+    ),
+    report_outline="""# <title>
+## Short answer  (3-6 bullets)
+## How it evolved  (a dated timeline: when, what changed, why it mattered, sources; if the question is not about change, the current state instead)
+## Current landscape  (table: option, what it is, good for, drawbacks, as of, sources)
+## What practitioners say  (consensus and disagreements from forums and blogs, with dates)
+## Pitfalls and gotchas
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    report_rules=(
+        "Put a date or version on every claim about when something appeared, changed or was deprecated"
+        " | Prefer official docs and changelogs for facts; label blog and forum content as opinion or experience"
+        " | Report a community consensus only when several independent sources agree; otherwise attribute it to"
+        " the one source"
+    ),
+    prefer_domains=(
+        "news.ycombinator.com",
+        "reddit.com",
+        "stackoverflow.com",
+        "github.com",
+        "dev.to",
+        "lobste.rs",
+        "substack.com",
+        "medium.com",
+    ),
+    # Only these answer on the instance; the others fail fast and cost nothing.
+    searx_engines=("bing", "hackernews", "stackoverflow", "reddit"),
+)
+
 # Selectable with --template NAME (and listed in the web UI). "research" is the default.
 TEMPLATES: dict[str, Template] = {
     "research": Template(),
+    "web": WEB,
     "market": MARKET,
     "market-trending": MARKET_TRENDING,
 }

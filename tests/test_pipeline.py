@@ -206,3 +206,12 @@ def test_market_templates_load_and_render():
     # CLI overrides still apply on top of the chosen template
     s2 = config.load("quick", None, {"template": {"time_range": "month"}}, template="market")
     assert s2.template.time_range == "month" and s2.template.intent == s.template.intent
+
+
+def test_web_template():
+    s = config.load("quick", None, {}, template="web")
+    ctx = context.build("how has interfacing with ai models evolved in python?", template=s.template)
+    assert not ctx.core.endswith("?")
+    assert "academic paper" in ctx.avoid and "forum" in ctx.sources
+    assert "How it evolved" in ctx.report_outline
+    assert "hackernews" in s.template.searx_engines and "news.ycombinator.com" in s.template.prefer_domains
