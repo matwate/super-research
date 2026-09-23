@@ -571,6 +571,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--focus", action="append", default=[], help="term to cover explicitly (repeatable), e.g. --focus PCGrad")
     b = p.add_argument_group("budgets (see config.py; also settable in research.toml)")
     b.add_argument("--preset", default="standard", choices=sorted(cfg.PRESETS))
+    b.add_argument("--template", default="research", choices=sorted(cfg.TEMPLATES), help="starting template: research (papers), market (is X worth investing in), market-trending (what's moving now)")
     b.add_argument("--config", type=Path, help="TOML file with [budgets]/[gates] tables")
     b.add_argument("--pages", help="pages per depth, e.g. 30,15,8 (length = max depth)")
     b.add_argument("--seed-queries", type=int)
@@ -601,7 +602,7 @@ def main(argv: list[str] | None = None) -> None:
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    settings = cfg.load(a.preset, a.config, build_overrides(a))
+    settings = cfg.load(a.preset, a.config, build_overrides(a), template=a.template)
     if a.print_config:
         print(json.dumps(dataclasses.asdict(settings), indent=2, default=str))
         return

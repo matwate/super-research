@@ -57,7 +57,7 @@ def test_problem_phrases():
 
 
 def test_clean_terms_drops_chrome_and_topic_plurals():
-    raw = ["PINNs", "SEIR", "README.md", "README", "PMC", "ORCID", "bib7", "machine learning (ML", "ODE-PINN", "DevOps", "pinn"]
+    raw = ["Pokemon card/pokemon-firered-leafgreen-gengar-ex", "PINNs", "SEIR", "README.md", "README", "PMC", "ORCID", "bib7", "machine learning (ML", "ODE-PINN", "DevOps", "pinn"]
     assert clean_terms(raw, "PINN for disease modeling") == ["SEIR", "ODE-PINN"]
 
 
@@ -193,3 +193,16 @@ def test_template_lens_reaches_jev_drafter_and_report():
     assert "research paper" in criteria()["result"]["true"]  # defaults unchanged
     sp = system_prompt(ctx)
     assert "## Bull case" in sp and "- Date every number" in sp and "- No buy/sell calls" in sp
+
+
+def test_market_templates_load_and_render():
+    s = config.load("quick", None, {}, template="market")
+    ctx = context.build("pokemon cards investing", template=s.template)
+    assert "investment" in ctx.intent and "backtest" in " ".join(ctx.facets)
+    assert "Bull case" in ctx.report_outline and "not financial advice" in ctx.report_rules
+    assert "sec.gov" in s.template.prefer_domains
+    trending = config.load("quick", None, {}, template="market-trending")
+    assert trending.template.time_range == "week"
+    # CLI overrides still apply on top of the chosen template
+    s2 = config.load("quick", None, {"template": {"time_range": "month"}}, template="market")
+    assert s2.template.time_range == "month" and s2.template.intent == s.template.intent

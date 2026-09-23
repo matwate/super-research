@@ -117,6 +117,134 @@ class Template:
     time_range: str = ""
 
 
+# --- starting templates -----------------------------------------------------------------
+# Market research: "is X worth investing in", "what's trending", asset-class studies
+# (stocks, funds, collectibles). The report presents evidence and both cases; it never
+# issues personal buy/sell calls, and every number carries an as-of date.
+_MARKET_RULES = (
+    "Attach an as-of date to every price, return, valuation, forecast or ranking, and say when a figure may be stale"
+    " | Separate reported facts from opinions and forecasts, and name who holds each opinion"
+    " | For every backtest or return study, state the period, the method, and known biases (survivorship,"
+    " look-ahead, selection, fees and transaction costs, spreads, liquidity) before its result"
+    " | Do not give personal buy, sell or hold instructions or price targets of your own; present the evidence"
+    " and what would have to be true for each case"
+    " | End the report with one line: This is research, not financial advice."
+)
+_MARKET_DOMAINS = (
+    "sec.gov",
+    "reuters.com",
+    "bloomberg.com",
+    "ft.com",
+    "wsj.com",
+    "cnbc.com",
+    "morningstar.com",
+    "marketwatch.com",
+    "finance.yahoo.com",
+    "seekingalpha.com",
+    "ssrn.com",
+    "nber.org",
+)
+_MARKET_LENS = dict(
+    sources=(
+        "a financial filing or earnings report, an analyst or equity research note, a reputable financial news"
+        " article, a market data or price-history page, an academic or industry study, or a backtest with a stated method"
+    ),
+    avoid=(
+        "a promotional or sponsored pick, a hype or pump post, a page with no data or no dates, a broker sign-up or"
+        " trading-app landing page"
+    ),
+    concepts="company, ticker, fund, index, asset class, product line, or named study, index or dataset",
+    report_rules=_MARKET_RULES,
+    prefer_domains=_MARKET_DOMAINS,
+)
+
+MARKET = Template(
+    intent=(
+        "evaluate {topic}{focus} as an investment: fundamentals or value drivers, valuation and pricing, recent"
+        " performance, catalysts and risks, analyst and academic views, and historical or backtested returns, plus"
+        " any {year} developments."
+    ),
+    deliverable=(
+        "an evidence-based investment case: bull and bear arguments, key numbers with dates, historical and"
+        " backtested performance with its caveats, risks, plus what the evidence cannot tell you."
+    ),
+    tone="analytical and skeptical, like an independent research note",
+    filter="skip sponsored picks, hype and pump posts, SEO listicles, and undated price predictions.",
+    facets=(
+        "{core} investment analysis",
+        "{core} returns historical performance",
+        "{core} backtest",
+        "{core} investment study",
+        "{core} valuation",
+        "{core} risks",
+        "{core} outlook {year}",
+        "{core} news {year}",
+        "{core} market data price history",
+        "{core} vs alternatives comparison",
+    ),
+    draft_focus=(
+        "value drivers and valuation, recent results and news, catalysts and risks, analyst and academic views,"
+        " historical returns and backtests, comparable assets or benchmarks, and the most recent ({year}) data"
+    ),
+    report_outline="""# <title>
+## Bottom line  (3-6 bullets: what the evidence says, not a buy/sell instruction)
+## Snapshot  (table: metric, value, as-of date, source)
+## Bull case
+## Bear case and risks
+## Historical performance and backtests  (table: study or test, period, method, result, biases, source)
+## What analysts, markets and studies say  (where they agree and disagree)
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    **_MARKET_LENS,
+)
+
+MARKET_TRENDING = Template(
+    intent=(
+        "find which {topic}{focus} are trending now and why: price moves, volume, news catalysts, sentiment, and"
+        " what the evidence says about each, plus how reliable such trends have been historically."
+    ),
+    deliverable=(
+        "a list of what is trending with the reason, key numbers with dates, and the main risk for each, plus"
+        " evidence on whether chasing these trends has paid off."
+    ),
+    tone="analytical and skeptical, like an independent market brief",
+    filter="skip sponsored picks, hype and pump posts, SEO listicles, and undated price predictions.",
+    facets=(
+        "{core} trending this week",
+        "{core} top gainers {year}",
+        "{core} most active volume",
+        "{core} news catalyst",
+        "{core} analyst upgrades downgrades",
+        "{core} momentum",
+        "{core} sentiment",
+        "momentum investing backtest evidence",
+    ),
+    draft_focus=(
+        "what is moving right now and why, volume and momentum, news catalysts, analyst changes, sentiment,"
+        " and evidence from studies and backtests on whether trend-following pays off"
+    ),
+    report_outline="""# <title>
+## Bottom line  (3-6 bullets, not a buy/sell instruction)
+## Trending now  (table: name or ticker, move, why, as-of date, main risk, sources)
+## Catalysts and drivers
+## Does chasing this pay off?  (momentum and trend-following evidence: study, period, method, result, biases)
+## Risks
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    time_range="week",
+    **_MARKET_LENS,
+)
+
+# Selectable with --template NAME (and listed in the web UI). "research" is the default.
+TEMPLATES: dict[str, Template] = {
+    "research": Template(),
+    "market": MARKET,
+    "market-trending": MARKET_TRENDING,
+}
+
+
 @dataclass(frozen=True)
 class Settings:
     budgets: Budgets = field(default_factory=Budgets)
@@ -235,10 +363,13 @@ def load(
     preset: str = "standard",
     config_file: Path | None = None,
     overrides: dict[str, Any] | None = None,
+    template: str = "research",
 ) -> Settings:
     if preset not in PRESETS:
         raise ValueError(f"unknown preset {preset!r}; choose from {sorted(PRESETS)}")
-    s = apply(Settings(), PRESETS[preset])
+    if template not in TEMPLATES:
+        raise ValueError(f"unknown template {template!r}; choose from {sorted(TEMPLATES)}")
+    s = replace(apply(Settings(), PRESETS[preset]), template=TEMPLATES[template])
     for path in (Path("research.toml"), config_file):
         if path and path.exists():
             s = apply(s, tomllib.loads(path.read_text()))
