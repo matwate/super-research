@@ -44,6 +44,29 @@ and never writes them to `run.json`, logs or `reports/`.
   to the tree, and each `[S#]` citation selects its source node.
 - **Runs**: every run in `reports/`, live or finished.
 
+## Templates
+
+| `--template` | For | Sources it wants |
+| --- | --- | --- |
+| `research` (default) | literature questions | papers, benchmarks, repos, technical writeups |
+| `web` | practitioner questions, "how has X evolved" | articles, blogs, official docs and changelogs, forum threads (HN, Reddit, Stack Overflow, GitHub) — no papers |
+| `market` | "is X worth investing in" | filings, earnings, analyst notes, financial news, studies and backtests |
+| `market-trending` | "what's moving now" | the same, restricted to the last week |
+
+```bash
+uv run research "how has interfacing with ai models evolved in python for the last years?" --template web
+```
+
+The `web` report is a short answer, a dated timeline of how things changed, the current
+options compared, what practitioners agree and disagree on, and pitfalls. Facts come from
+official docs and changelogs; blog and forum content is labelled as opinion, and a
+"consensus" needs several independent sources. On this SearXNG instance only Bing and
+Hacker News answer for general web search, so Tavily does most of the work.
+
+Concept branches are searched as `<concept> <anchor>`, where the anchor is a 2-4 word
+subject the drafter returns ("Python LLM APIs"), so question-style topics don't get the
+whole question appended to every follow-up search.
+
 ## Market research
 
 ```bash
