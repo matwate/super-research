@@ -1,5 +1,7 @@
 # super-research
 
+> This is a vibe-coded toy example for an idea i had
+
 A research agent that spends on one expensive model call per pass. Cheap models do the
 routing: a flash LLM drafts the seed queries (~$0.0001), Needle 3 (local) pulls named
 concepts out of pages, and Jev (TypeSafe) makes every keep/skip decision. Tavily and SearXNG search. One OpenCode Go LLM call writes the report
