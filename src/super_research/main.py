@@ -326,11 +326,12 @@ def slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:60] or "research"
 
 
-def backends(settings: cfg.Settings) -> list[str]:
+def backends(settings: cfg.Settings, keys: cfg.Keys | None = None) -> list[str]:
+    has_tavily = bool(keys.tavily) if keys else tavily_client.available()
     names = list(settings.search_backends)
     if "auto" in names:
-        names = ["tavily", "searxng"] if tavily_client.available() else ["searxng"]
-    if "tavily" in names and not tavily_client.available():
+        names = ["tavily", "searxng"] if has_tavily else ["searxng"]
+    if "tavily" in names and not has_tavily:
         log.warning("TAVILY_API_KEY not set; dropping the tavily backend")
         names.remove("tavily")
     return names
@@ -343,9 +344,12 @@ async def run(
     focus: list[str],
     write_report: bool = True,
     ui=None,
+    keys: cfg.Keys | None = None,
+    run_dir: Path | None = None,
 ) -> Path:
-    ctx = context.build(topic, intent, focus)
-    run_dir = settings.reports_dir / slugify(topic) / dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    keys = keys or cfg.Keys.from_env()
+    ctx = context.build(topic, intent, focus, template=settings.template)
+    run_dir = run_dir or settings.reports_dir / slugify(topic) / dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
     plan = "\n".join(p for p, _ in ctx.needle_prompts(settings.budgets.seed_queries))
     (run_dir / "context_prompt.txt").write_text(f"{ctx.render()}\n\n--- needle input ---\n{plan}\n")
@@ -361,7 +365,7 @@ async def run(
     else:
         from .needle_client import NeedleClient
 
-        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency)
+        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency, api_key=keys.typesafe)
         needle = NeedleClient(needle_log)
 
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):  # needle's import resets these
@@ -372,16 +376,17 @@ async def run(
     searx_http = httpx.AsyncClient(headers={"User-Agent": "super-research/0.1"})
     searx_sem = asyncio.Semaphore(settings.searx_concurrency)
 
-    use = backends(settings)
+    use = backends(settings, keys)
     search_log = JsonlLog(run_dir / "search.jsonl")
     tavily = None
-    if "tavily" in use or (settings.tavily_extract_fallback and tavily_client.available()):
+    if "tavily" in use or (settings.tavily_extract_fallback and keys.tavily):
         tavily = tavily_client.TavilySearch(
             settings.tavily_depth,
             settings.tavily_max_results,
             settings.tavily_prefer_domains,
             settings.budgets.page_tokens,
             search_log,
+            api_key=keys.tavily,
         )
 
     async def searxng(q: str):
@@ -438,7 +443,7 @@ async def run(
         from . import drafter
 
         async def draft_fn(c, n):
-            return await drafter.draft(c, n, base_url=settings.opencode_url, model=settings.draft_model, session_id=run_id, year=dt.date.today().year)
+            return await drafter.draft(c, n, base_url=settings.opencode_url, model=settings.draft_model, session_id=run_id, year=dt.date.today().year, api_key=keys.opencode)
 
     r = Researcher(ctx, settings, run_dir, judge, needle, search_fn, fetch_fn, draft_fn)
     if ui:
@@ -468,6 +473,7 @@ async def run(
                     max_output_tokens=settings.budgets.report_max_output_tokens,
                     session_id=run_id,
                     prompt_path=run_dir / "report_prompt.txt",
+                    api_key=keys.opencode,
                 )
             r.timings["report_s"] = round(time.monotonic() - t, 1)
             (run_dir / "report.md").write_text(result.markdown)
@@ -552,7 +558,7 @@ def build_overrides(a: argparse.Namespace) -> dict[str, Any]:
     for kv in a.set or []:
         k, _, v = kv.partition("=")
         section, _, name = k.rpartition(".")
-        (o[section] if section else o)[name] = _parse_value(v)
+        (o.setdefault(section, {}) if section else o)[name] = _parse_value(v)
     return {k: v for k, v in o.items() if v != {}}
 
 

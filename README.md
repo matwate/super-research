@@ -23,6 +23,41 @@ scores them, concept expansions, and running Jev/Tavily spend. At the end it pri
 knowledge tree and a cost table. Pass `--plain` for plain log lines (automatic when stderr
 isn't a TTY).
 
+## Web UI
+
+```bash
+uv run research-web                 # http://127.0.0.1:8321
+uv run research-web --env-keys      # fall back to this machine's keys when a browser sends none
+```
+
+The same pass as the CLI, run from a browser with **your own keys**. Add the OpenCode Go and
+TypeSafe keys (Tavily optional) on the Keys page. They stay in the browser and go to the
+server only in the request that starts a run. The server keeps them in memory for that run
+and never writes them to `run.json`, logs or `reports/`.
+
+- **New Run**: topic, focus terms, and the **starting template** (below), with a live preview
+  of the seed tree and the stage-0 context block. Pick a budget preset or set each budget
+  and Jev gate, the report and drafter models, and the search backends.
+- **Run**: the knowledge tree grows live over server-sent events. Outline and map views,
+  every node's Jev scores, the path that led to it ("how it got here"), the links Jev
+  followed, and the scraped page text. Pruned nodes show on demand. The report opens next
+  to the tree, and each `[S#]` citation selects its source node.
+- **Runs**: every run in `reports/`, live or finished.
+
+## Starting template
+
+Stage 0 is a template, and you can edit it: intent, deliverable, tone, filter, and the seed
+plan (the facets Needle splits into queries when the drafter is off, and the fallback when
+it fails). Placeholders: `{topic}`, `{core}`, `{year}`, `{last_year}`, `{focus}`. The web UI
+has three starting points (research survey, engineering practice, gap hunt) and saves your
+own in the browser. On the CLI, use a `[template]` table in `research.toml` or `--set`:
+
+```bash
+uv run research "..." --set template.tone="practitioner oriented" \
+  --set 'template.facets=["{core} in production","{core} postmortem","{core} benchmark"]' \
+  --set draft_model=""              # seed from the plan instead of the drafter
+```
+
 ## Pipeline
 
 | Stage | Who | What |
@@ -115,4 +150,5 @@ delves whose content Jev then scored as relevant (target ≥ 0.7).
   `bing, google scholar, crossref, arxiv, semantic scholar`.
 - Bot walls and JS-only pages go to Tavily extract. If that also fails, they count as failed
   fetches and don't use up page budget.
-- Tests run offline with stub Jev/Needle: `uv run pytest`.
+- Tests run offline with stub Jev/Needle: `uv run pytest`. `tests/test_server.py` drives the web
+  server through a whole pass and checks that browser keys never reach disk.

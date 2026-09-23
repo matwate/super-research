@@ -16,8 +16,8 @@ from .searx import SearchResult
 USD_PER_CREDIT = 0.008
 
 
-def available() -> bool:
-    return bool(os.environ.get("TAVILY_API_KEY"))
+def available(api_key: str | None = None) -> bool:
+    return bool(api_key or os.environ.get("TAVILY_API_KEY"))
 
 
 class TavilySearch:
@@ -28,8 +28,9 @@ class TavilySearch:
         prefer_domains: tuple[str, ...],
         token_budget: int,
         log: Callable[[dict], None],
+        api_key: str | None = None,
     ):
-        self.client = AsyncTavilyClient()
+        self.client = AsyncTavilyClient(api_key=api_key)
         self.depth = depth
         self.max_results = max_results
         self.prefer_domains = list(prefer_domains)

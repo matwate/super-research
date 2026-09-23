@@ -1,0 +1,87 @@
+/* Spot design system: tokens and components. Lilac / Plum is the default colourway. */
+
+:root,
+[data-theme="plum"] {
+  --ground:#cbb9e4; --ink:#2b1b45; --on-ink:#f4f0fa; --rule:#5a4680;
+  --accent:#e8a317; --on-accent:#2b1b45; --shade:#a892cc; --on-shade:#2b1b45;
+  --paper:#f4f0fa; --on-paper:#2b1b45;
+
+  --space-1:4px; --space-2:8px; --space-3:16px;
+  --space-4:32px; --space-5:64px; --space-6:128px;
+
+  --radius-0:0; --radius-1:2px; --radius-pill:999px;
+
+  --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"Space Mono",ui-monospace,"Courier New",monospace;
+}
+
+[data-theme="teal"] {
+  --ground:#09aea1; --ink:#1b3331; --on-ink:#f2efe6; --rule:#0a3b37;
+  --accent:#f5505d; --on-accent:#12211f; --shade:#0a4a45; --on-shade:#f2efe6;
+  --paper:#f2efe6; --on-paper:#1b3331;
+}
+
+[data-theme="office"] {
+  --ground:#ffffff; --ink:#16181c; --on-ink:#ffffff; --rule:#5b6068;
+  --accent:#1a3ea8; --on-accent:#ffffff; --shade:#ebe9e4; --on-shade:#16181c;
+  --paper:#f4f2ed; --on-paper:#16181c;
+}
+
+/* Button */
+.spot-button {
+  display:inline-flex; align-items:center; gap:var(--space-2);
+  padding:var(--space-2) var(--space-3);
+  border:1px solid var(--rule); border-radius:var(--radius-0);
+  background:none; color:var(--ink);
+  font-family:var(--font-mono); font-size:12px; line-height:16px;
+  letter-spacing:0.08em; text-decoration:none; cursor:pointer;
+}
+.spot-button:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+.spot-button:disabled { opacity:0.5; cursor:not-allowed; }
+.spot-button--solid { background:var(--ink); border-color:var(--ink); color:var(--on-ink); }
+.spot-button--accent { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+.spot-button--pill { border-radius:var(--radius-pill); padding-inline:var(--space-3); }
+
+/* Label */
+.spot-label {
+  display:block; font-family:var(--font-mono); font-size:12px; line-height:16px;
+  letter-spacing:0.08em; color:var(--ink);
+}
+.spot-section { border-left:1px solid var(--rule); padding-left:var(--space-4); }
+.spot-section > .spot-label {
+  margin:0 0 var(--space-4) calc(var(--space-4) * -1); padding-left:var(--space-1);
+}
+
+/* Marker */
+.spot-mark {
+  background:var(--accent); color:var(--on-accent); border-radius:var(--radius-1);
+  padding:0 0.12em;
+  box-decoration-break:clone; -webkit-box-decoration-break:clone;
+}
+
+/* Frame */
+.spot-frame { position:relative; padding:var(--space-4); }
+.spot-frame::before, .spot-frame::after,
+.spot-frame > .spot-frame__in::before, .spot-frame > .spot-frame__in::after {
+  content:""; position:absolute; width:14px; height:14px; border:0 solid var(--rule);
+}
+.spot-frame::before { top:0; left:0; border-top-width:1px; border-left-width:1px; }
+.spot-frame::after { top:0; right:0; border-top-width:1px; border-right-width:1px; }
+.spot-frame > .spot-frame__in::before { bottom:0; left:0; border-bottom-width:1px; border-left-width:1px; }
+.spot-frame > .spot-frame__in::after { bottom:0; right:0; border-bottom-width:1px; border-right-width:1px; }
+
+/* Hero */
+.spot-hero {
+  margin:0; color:var(--ink); font-family:var(--font-display);
+  font-size:128px; line-height:0.88; font-weight:800;
+  letter-spacing:-0.045em; text-wrap:balance;
+}
+.spot-hero--center { text-align:center; }
+.spot-hero--2 { font-size:88px; line-height:0.9; letter-spacing:-0.04em; }
+.spot-hero--3 { font-size:56px; line-height:0.94; font-weight:700; letter-spacing:-0.03em; }
+
+@media (max-width:640px) {
+  .spot-hero { font-size:88px; line-height:0.9; letter-spacing:-0.04em; }
+  .spot-hero--2 { font-size:56px; }
+  .spot-hero--3 { font-size:32px; }
+}

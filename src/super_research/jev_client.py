@@ -66,8 +66,8 @@ _Q_PROBLEM = NoulCriteria(
 
 
 class JevJudge:
-    def __init__(self, model: str, max_calls: int, log: Callable[[dict], None], concurrency: int = 8):
-        self.client = AsyncTypeSafeClient(model=model)
+    def __init__(self, model: str, max_calls: int, log: Callable[[dict], None], concurrency: int = 8, api_key: str | None = None):
+        self.client = AsyncTypeSafeClient(model=model, api_key=api_key)
         self.max_calls = max_calls
         self.log = log
         self.calls = 0

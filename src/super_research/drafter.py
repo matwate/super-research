@@ -46,8 +46,8 @@ def parse(text: str, n: int) -> list[str]:
     return list(dict.fromkeys(q for q in out if 2 <= len(q) <= 120))[:n]
 
 
-async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, session_id: str, year: int) -> Draft:
-    key = os.environ.get("OPENCODE_API_KEY")
+async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, session_id: str, year: int, api_key: str | None = None) -> Draft:
+    key = api_key or os.environ.get("OPENCODE_API_KEY")
     if not key:
         raise RuntimeError("OPENCODE_API_KEY is not set")
     body = {

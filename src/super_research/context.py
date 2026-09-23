@@ -6,6 +6,8 @@ import datetime as dt
 import re
 from dataclasses import dataclass, field
 
+from .config import Template
+
 # Words that describe the deliverable rather than the subject; stripped for query building
 # so "gradient surgery methods and results" searches as "gradient surgery ... survey".
 _FILLER = re.compile(r"\b(methods?|results?|and|overview|papers?|research|the|of|latest|recent|approaches|techniques)\b", re.IGNORECASE)
@@ -43,33 +45,41 @@ class ResearchContext:
         return [("Search for " + ", then search for ".join(c) + ".", c) for c in chunks]
 
 
-def build(topic: str, intent: str | None = None, focus: list[str] | None = None, today: dt.date | None = None) -> ResearchContext:
+_PLACEHOLDER = re.compile(r"\{(topic|core|year|last_year|focus)\}")
+
+
+def fill(text: str, values: dict[str, str]) -> str:
+    """Substitutes the known placeholders only, so a stray brace in a user template is kept."""
+    return " ".join(_PLACEHOLDER.sub(lambda m: values[m.group(1)], text).split())
+
+
+def build(
+    topic: str,
+    intent: str | None = None,
+    focus: list[str] | None = None,
+    today: dt.date | None = None,
+    template: Template | None = None,
+) -> ResearchContext:
+    t = template or Template()
     topic = " ".join(topic.split())
     core = " ".join(_FILLER.sub(" ", topic).split()) or topic
     year = (today or dt.date.today()).year
     focus = [f.strip() for f in focus or [] if f.strip()]
-    focus_s = f", including {', '.join(focus)}" if focus else ""
+    values = {
+        "topic": topic,
+        "core": core,
+        "year": str(year),
+        "last_year": str(year - 1),
+        "focus": f", including {', '.join(focus)}" if focus else "",
+    }
     ctx = ResearchContext(
         topic=topic,
         core=core,
-        intent=intent
-        or f"find papers, benchmarks, and engineering writeups covering {topic}{focus_s}, plus any {year} updates.",
-        deliverable="a comparison of methods, empirical results, plus what is missing.",
-        tone="research oriented",
-        filter="skip product pages, skip tutorials below graduate level, skip SEO listicles.",
+        intent=intent or fill(t.intent, values),
+        deliverable=fill(t.deliverable, values),
+        tone=fill(t.tone, values),
+        filter=fill(t.filter, values),
     )
-    ctx.facets = [
-        *(f"{f} {core}" for f in focus),
-        core,
-        f"{core} survey",
-        f"{core} benchmark comparison",
-        f"{core} arxiv",
-        f"{core} {year}",
-        f"{core} limitations",
-        f"{core} github implementation",
-        f"{core} explained blog",
-        f"{core} state of the art",
-        f"{core} ablation study",
-        f"{core} review {year - 1}",
-    ]
+    facets = [f"{f} {core}" for f in focus] + [fill(f, values) for f in t.facets]
+    ctx.facets = list(dict.fromkeys(f for f in facets if f))
     return ctx

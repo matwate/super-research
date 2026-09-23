@@ -67,9 +67,39 @@ class Gates:
 
 
 @dataclass(frozen=True)
+class Template:
+    """The stage-0 starting template: how a raw topic becomes the research context and the
+    facet plan (the first branches of the knowledge tree when no drafter runs, and the
+    context the drafter, Jev and the report LLM all read).
+
+    Placeholders: {topic}, {core} (topic minus deliverable words), {year}, {last_year},
+    {focus} (", including A, B" when --focus terms are given, else empty). Other braces
+    are left as typed."""
+
+    intent: str = "find papers, benchmarks, and engineering writeups covering {topic}{focus}, plus any {year} updates."
+    deliverable: str = "a comparison of methods, empirical results, plus what is missing."
+    tone: str = "research oriented"
+    filter: str = "skip product pages, skip tutorials below graduate level, skip SEO listicles."
+    facets: tuple[str, ...] = (
+        "{core}",
+        "{core} survey",
+        "{core} benchmark comparison",
+        "{core} arxiv",
+        "{core} {year}",
+        "{core} limitations",
+        "{core} github implementation",
+        "{core} explained blog",
+        "{core} state of the art",
+        "{core} ablation study",
+        "{core} review {last_year}",
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     budgets: Budgets = field(default_factory=Budgets)
     gates: Gates = field(default_factory=Gates)
+    template: Template = field(default_factory=Template)
     # Backends queried per search, merged by URL (first listed wins on duplicates).
     # "auto" = tavily + searxng when TAVILY_API_KEY is set, else searxng only.
     search_backends: tuple[str, ...] = ("auto",)
@@ -105,6 +135,28 @@ class Settings:
     concurrency: int = 8
     reports_dir: Path = Path("reports")
     offline: bool = False  # stub Jev + skip network for tests / dry runs
+
+
+@dataclass(frozen=True)
+class Keys:
+    """API keys for one run. Passed explicitly (not via os.environ) so the web server can
+    run several users' passes at once, each with the keys they brought. Never written to
+    run.json."""
+
+    opencode: str | None = None
+    typesafe: str | None = None
+    tavily: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "Keys":
+        return cls(
+            opencode=os.environ.get("OPENCODE_API_KEY") or None,
+            typesafe=os.environ.get("TYPESAFE_API_KEY") or None,
+            tavily=os.environ.get("TAVILY_API_KEY") or None,
+        )
+
+    def __repr__(self) -> str:  # keep keys out of logs and tracebacks
+        return f"Keys(opencode={bool(self.opencode)}, typesafe={bool(self.typesafe)}, tavily={bool(self.tavily)})"
 
 
 PRESETS: dict[str, dict[str, Any]] = {
@@ -153,7 +205,8 @@ def apply(settings: Settings, patch: dict[str, Any]) -> Settings:
     patch = dict(patch)
     budgets = _coerce(Budgets, settings.budgets, patch.pop("budgets", {}))
     gates = _coerce(Gates, settings.gates, patch.pop("gates", {}))
-    return _coerce(Settings, replace(settings, budgets=budgets, gates=gates), patch)
+    template = _coerce(Template, settings.template, patch.pop("template", {}))
+    return _coerce(Settings, replace(settings, budgets=budgets, gates=gates, template=template), patch)
 
 
 def load(

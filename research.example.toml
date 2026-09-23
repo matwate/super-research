@@ -30,3 +30,8 @@ concept = 0.5
 problem = 0.5
 page_for_delve = 0.4
 depth_decay = 0.85
+
+[template]                      # stage 0; placeholders {topic} {core} {year} {last_year} {focus}
+# intent = "find papers, benchmarks, and engineering writeups covering {topic}{focus}, plus any {year} updates."
+# tone = "research oriented"
+# facets = ["{core}", "{core} survey", "{core} benchmark comparison", "{core} arxiv"]

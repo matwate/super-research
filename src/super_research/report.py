@@ -98,11 +98,12 @@ async def write(
     max_output_tokens: int,
     session_id: str,
     prompt_path=None,
+    api_key: str | None = None,
 ) -> ReportResult:
     user, n_sources = assemble(ctx, tree, context_tokens)
     if prompt_path:
         prompt_path.write_text(f"=== SYSTEM ===\n{SYSTEM}\n\n=== USER ===\n{user}")
-    key = os.environ.get("OPENCODE_API_KEY")
+    key = api_key or os.environ.get("OPENCODE_API_KEY")
     if not key:
         raise RuntimeError("OPENCODE_API_KEY is not set")
     body = {
