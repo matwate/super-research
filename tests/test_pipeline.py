@@ -42,6 +42,11 @@ def test_clean_terms():
     assert clean_terms(raw, "gradient surgery methods") == ["PCGrad", "NYUv2"]
 
 
+def test_clean_terms_drops_chrome_and_topic_plurals():
+    raw = ["PINNs", "SEIR", "README.md", "README", "PMC", "ORCID", "bib7", "machine learning (ML", "ODE-PINN", "DevOps", "pinn"]
+    assert clean_terms(raw, "PINN for disease modeling") == ["SEIR", "ODE-PINN"]
+
+
 def fake_web():
     pages = {
         "https://ex.org/pcgrad": HTML,

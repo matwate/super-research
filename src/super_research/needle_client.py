@@ -28,14 +28,21 @@ _NAMED = re.compile(r"\b(?:[A-Z][a-z]+[A-Z][A-Za-z0-9]*|[A-Z]{2,}[a-z]*[A-Za-z0-
 _GENERIC = {
     "PDF", "HTML", "URL", "API", "GPU", "CPU", "AI", "ML", "DOI", "USA", "IEEE", "ACM", "PMLR", "HTTP", "FAQ",
     "RSS", "JSON", "CSS", "PhD", "LaTeX", "GitHub", "arXiv", "NeurIPS", "ICML", "ICLR", "CVPR", "AAAI", "OK",
+    # Site, publisher and repo chrome that shows up in scraped pages.
+    "README", "PMC", "PMCID", "PMID", "ORCID", "DevOps", "EXPLORE", "SIAM", "PLOS", "MDPI", "ISSN", "ISBN",
+    "PubMed", "CrossRef", "Elsevier", "Springer", "Wiley", "ResearchGate", "LinkedIn", "YouTube",
+    "AI/ML", "USD", "EUR", "CC-BY", "BibTeX", "NIH", "NSF", "ACL", "EMNLP", "AAAS", "UTC",
 }
+_GENERIC_L = {g.lower() for g in _GENERIC}
+# Reference/figure anchors and file names: bib7, ref12, fig3, eq(4), README.md, train.py
+_CHROME_TERM = re.compile(r"^(bib|ref|fig|figure|table|tab|eq|sec|app|cr|b)\d+[a-z]?$|\.(md|py|txt|pdf|json|yaml|yml|ipynb)$", re.I)
 
 
 def regex_terms(text: str, limit: int = 10) -> list[str]:
     """Code-side candidates: tokens shaped like method/dataset names, by frequency."""
     counts: dict[str, int] = {}
     for m in _NAMED.findall(text):
-        if m in _GENERIC or len(m) < 3 or m.isdigit():
+        if m.lower() in _GENERIC_L or len(m) < 3 or m.isdigit():
             continue
         counts[m] = counts.get(m, 0) + 1
     return sorted(counts, key=lambda k: -counts[k])[:limit]
@@ -142,9 +149,14 @@ def clean_query(q: str) -> str:
     return q
 
 
+def _singular(w: str) -> str:
+    return w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+
+
 def clean_terms(raw: list[str], topic: str) -> list[str]:
     """Code-side filtering of Needle's spans before Jev sees them."""
     topic_l = topic.lower()
+    topic_words = {_singular(w) for w in re.findall(r"[a-z0-9-]+", topic_l)}
     out: dict[str, str] = {}
     for t in raw:
         t = t.strip(" .,;:()[]\"'")
@@ -152,6 +164,13 @@ def clean_terms(raw: list[str], topic: str) -> list[str]:
         if not (2 <= len(t) <= 60) or len(words) > 6:
             continue
         if re.search(r"\bet al\b|^\d+$|https?://", t, re.I) or t.lower() in topic_l:
+            continue
+        if t.count("(") != t.count(")") or t.count("[") != t.count("]"):  # cut-off fragment
+            continue
+        if t.lower() in _GENERIC_L or _CHROME_TERM.search(t):
+            continue
+        # "PINNs" for topic "PINN for disease modeling": the topic itself, not a new concept.
+        if all(_singular(w) in topic_words for w in re.findall(r"[a-z0-9-]+", t.lower())):
             continue
         out.setdefault(t.lower(), t)
     return list(out.values())
