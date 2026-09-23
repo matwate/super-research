@@ -66,7 +66,10 @@ _NOT_MODIFIER = set(
     reliable another main common known certain severe strong further new novel existing current typical
     general possible serious significant potential high low great greater higher lower overall inherent
     present presents prevent under over without within due same different various specific particular
-    well known still often common only even""".split()
+    well known still often common only even
+    improves improve reduces reduce causes cause addresses address mitigates mitigate avoids avoid
+    handles handle tackles tackle resolves resolve overcomes overcome suffers suffer shows show
+    exhibits exhibit leads lead yields yield introduces introduce remains remain""".split()
 )
 
 

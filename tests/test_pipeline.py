@@ -53,6 +53,7 @@ def test_problem_phrases():
     assert got[0] == "gradient imbalance"
     assert {"stiffness", "parameter identifiability", "data scarcity", "overfitting"} <= set(got)
     assert not any(w in " ".join(got) for w in ("major", "extreme", "preventing"))
+    assert problem_phrases("This improves parameter identifiability.", "PINN") == ["parameter identifiability"]
 
 
 def test_clean_terms_drops_chrome_and_topic_plurals():
