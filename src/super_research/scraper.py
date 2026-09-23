@@ -164,6 +164,13 @@ async def fetch(client: httpx.AsyncClient, url: str, token_budget: int) -> Page:
     return page
 
 
+def worth_extracting(err: ScrapeError) -> bool:
+    """Failures an extract API can get past: bot walls, auth/rate blocks, JS-only pages.
+    Not 404s, non-HTML files or network errors."""
+    msg = str(err)
+    return msg.startswith(("bot wall", "HTTP 401", "HTTP 403", "HTTP 429", "too little text"))
+
+
 def new_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"},

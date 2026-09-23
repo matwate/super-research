@@ -168,3 +168,13 @@ async def test_seed_queries_use_drafter_then_fallback(tmp_path):
     await r.seed_queries()
     assert [q.label for q in r.tree.of("query")] == ctx.facets[:4]
     assert all(q.via == "needle_seed" for q in r.tree.of("query"))
+
+
+def test_worth_extracting():
+    from super_research.scraper import ScrapeError, worth_extracting
+
+    assert worth_extracting(ScrapeError("bot wall: Just a moment"))
+    assert worth_extracting(ScrapeError("HTTP 403"))
+    assert worth_extracting(ScrapeError("too little text (blocked, JS-only, or empty)"))
+    assert not worth_extracting(ScrapeError("HTTP 404"))
+    assert not worth_extracting(ScrapeError("not html: application/pdf"))

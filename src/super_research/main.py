@@ -421,9 +421,13 @@ async def run(
                 pass
         try:
             return await scraper.fetch(http, url, settings.budgets.page_tokens)
-        except scraper.ScrapeError:
-            if not (tavily and settings.tavily_extract_fallback):
+        except scraper.ScrapeError as e:
+            if not (tavily and settings.tavily_extract_fallback and scraper.worth_extracting(e)):
                 raise
+            if tavily.extracts >= settings.tavily_extract_max:
+                raise
+            # Count before awaiting so concurrent fetches can't overshoot the cap.
+            tavily.extracts += 1
             page = await tavily.extract(url)
             page.fetched_by = "tavily extract"
             return page

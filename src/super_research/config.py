@@ -86,6 +86,9 @@ class Settings:
     )
     # When the plain scraper fails (bot wall, JS-only, HTTP 4xx), retry the URL via Tavily extract.
     tavily_extract_fallback: bool = True
+    # Extracts are charged even when they fail, so only blocked/JS-only pages qualify
+    # (not 404s or non-HTML), and at most this many per pass.
+    tavily_extract_max: int = 8
     searx_url: str = "https://search.matwa.dev"
     # DuckDuckGo/Brave/Startpage/Google get captcha'd or return nothing on the instance;
     # these answer reliably (arxiv/semantic scholar are flaky but fail fast).

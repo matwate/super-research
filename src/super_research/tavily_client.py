@@ -71,7 +71,6 @@ class TavilySearch:
 
     async def extract(self, url: str, title: str = "") -> Page:
         resp = await self.client.extract(url, format="markdown", include_usage=True)
-        self.extracts += 1
         self._charge(resp)
         ok = resp.get("results") or []
         self.log({"kind": "tavily_extract", "url": url, "ok": bool(ok), "credits": (resp.get("usage") or {}).get("credits")})
