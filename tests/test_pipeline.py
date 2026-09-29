@@ -57,7 +57,7 @@ def test_problem_phrases():
 
 
 def test_clean_terms_drops_chrome_and_topic_plurals():
-    raw = ["PINNs", "SEIR", "README.md", "README", "PMC", "ORCID", "bib7", "machine learning (ML", "ODE-PINN", "DevOps", "pinn"]
+    raw = ["Pokemon card/pokemon-firered-leafgreen-gengar-ex", "PINNs", "SEIR", "README.md", "README", "PMC", "ORCID", "bib7", "machine learning (ML", "ODE-PINN", "DevOps", "pinn"]
     assert clean_terms(raw, "PINN for disease modeling") == ["SEIR", "ODE-PINN"]
 
 
@@ -142,8 +142,14 @@ def test_strip_reasoning():
 
 def test_parse_draft():
     text = '<think>hmm</think>Sure:\n```json\n{"queries": ["PINN SEIR", "PINN SEIR", " stiff ODE PINN ", 3, ""]}\n```'
-    assert parse_draft(text, 10) == ["PINN SEIR", "stiff ODE PINN"]
-    assert parse_draft("no json here", 10) == []
+    assert parse_draft(text, 10) == (["PINN SEIR", "stiff ODE PINN"], "")
+    assert parse_draft("no json here", 10) == ([], "")
+    assert parse_draft('{"anchor": "Python LLM APIs", "queries": ["a b"]}', 10) == (["a b"], "Python LLM APIs")
+
+
+def test_anchor_fallback_for_long_topics():
+    assert context.build("PINN for disease modeling").anchor == "PINN for disease modeling"
+    assert context.build("how has interfacing with ai models evolved in python for the last years?").anchor == "interfacing ai models python"
 
 
 async def test_seed_queries_use_drafter_then_fallback(tmp_path):
@@ -154,7 +160,7 @@ async def test_seed_queries_use_drafter_then_fallback(tmp_path):
     search_fn, fetch_fn = fake_web()
 
     async def good(c, n):
-        return Draft(["PCGrad multi-task conflicting gradients", "gradient surgery survey"], "glm-5.3-flash", 100, 50, 0.0001)
+        return Draft(["PCGrad multi-task conflicting gradients", "gradient surgery survey"], "gradient surgery", "glm-5.3-flash", 100, 50, 0.0001)
 
     r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn, good)
     await r.seed_queries()
@@ -178,11 +184,98 @@ def test_worth_extracting():
     assert worth_extracting(ScrapeError("too little text (blocked, JS-only, or empty)"))
     assert not worth_extracting(ScrapeError("HTTP 404"))
     assert not worth_extracting(ScrapeError("not html: application/pdf"))
-
-
 def test_unfence_report():
     from super_research.report import unfence
 
     assert unfence("```markdown\n# Title\n\nbody\n```") == "# Title\n\nbody"
     assert unfence("  ```md\n# T\n```  ") == "# T"
     assert unfence("# Title\n\n```python\nx = 1\n```") == "# Title\n\n```python\nx = 1\n```"
+
+
+def test_template_lens_reaches_jev_drafter_and_report():
+    from super_research.config import Template
+    from super_research.jev_client import criteria
+    from super_research.report import system_prompt
+
+    t = Template(sources="an earnings report or SEC filing", concepts="company or ticker",
+                 report_outline="# <title>\n## Bull case\n## Bear case", report_rules="Date every number | No buy/sell calls")
+    ctx = context.build("NVDA", template=t)
+    q = criteria({"sources": ctx.sources, "concepts": ctx.concepts})
+    assert "SEC filing" in q["result"]["true"] and "company or ticker" in q["concept"]["true"]
+    assert "research paper" in criteria()["result"]["true"]  # defaults unchanged
+    sp = system_prompt(ctx)
+    assert "## Bull case" in sp and "- Date every number" in sp and "- No buy/sell calls" in sp
+
+
+def test_market_templates_load_and_render():
+    s = config.load("quick", None, {}, template="market")
+    ctx = context.build("pokemon cards investing", template=s.template)
+    assert "investment" in ctx.intent and "backtest" in " ".join(ctx.facets)
+    assert "Bull case" in ctx.report_outline and "not financial advice" in ctx.report_rules
+    assert "sec.gov" in s.template.prefer_domains
+    trending = config.load("quick", None, {}, template="market-trending")
+    assert trending.template.time_range == "week"
+    # CLI overrides still apply on top of the chosen template
+    s2 = config.load("quick", None, {"template": {"time_range": "month"}}, template="market")
+    assert s2.template.time_range == "month" and s2.template.intent == s.template.intent
+
+
+def test_web_template():
+    s = config.load("quick", None, {}, template="web")
+    ctx = context.build("how has interfacing with ai models evolved in python?", template=s.template)
+    assert not ctx.core.endswith("?")
+    assert "academic paper" in ctx.avoid and "forum" in ctx.sources
+    assert "How it evolved" in ctx.report_outline
+    assert "hackernews" in s.template.searx_engines and "news.ycombinator.com" in s.template.prefer_domains
+
+
+async def test_transient_jev_errors_skip_then_stop(tmp_path):
+    from typesafe_sdk import TypeSafeAPIConnectionError
+
+    s = config.load("standard", None, {})
+    ctx = context.build("gradient surgery")
+    search_fn, fetch_fn = fake_web()
+    r = Researcher(ctx, s, tmp_path, StubJudge(), StubNeedle(), search_fn, fetch_fn)
+
+    async def down():
+        raise TypeSafeAPIConnectionError("All connection attempts failed")
+
+    async def up():
+        return 0.9
+
+    assert await r._guard(down()) is None and r.stop_reason is None
+    assert await r._guard(up()) == 0.9 and r.jev_failures == 0
+    for _ in range(5):
+        await r._guard(down())
+    assert r.stop_reason and "Jev unreachable" in r.stop_reason
+
+
+def test_strip_nav_keeps_content_drops_sidebar():
+    from super_research.scraper import page_from_markdown, strip_nav
+
+    md = """[![OpenAI Developers](/logo.svg) ChatGPT](/)
+
+API Dashboard
+
+## Search the API docs
+
+### Suggested
+
+* [Home](/api/docs)
+* [Quickstart](/api/docs/quickstart)
+
+# Deprecations
+
+On 2025-08-26 we deprecated the Assistants API; it shuts down on 2026-08-26. Migrate to the [Responses API](https://x.dev/responses).
+
+```python
+client.responses.create(model="gpt-5")
+```
+"""
+    out = strip_nav(md)
+    assert "Quickstart" not in out and "API Dashboard" not in out and "Suggested" not in out
+    assert "# Deprecations" in out and "Assistants API" in out and "client.responses.create" in out
+    page = page_from_markdown("https://x.dev/deprecations", "Deprecations", md, 1000)
+    assert page.text.startswith("# Deprecations")
+    assert [a.url for a in page.anchors] == ["https://x.dev/responses"]
+>>>>>>> conflict 1 of 1 ends

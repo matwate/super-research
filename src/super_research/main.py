@@ -28,11 +28,22 @@ import httpx
 from . import config as cfg
 from . import context, opencode, report, scraper, searx, tavily_client
 from .needle_client import problem_phrases
+from typesafe_sdk import (
+    TypeSafeAPIConnectionError,
+    TypeSafeAPITimeoutError,
+    TypeSafeInternalServerError,
+    TypeSafeRateLimitError,
+)
+
 from .jev_client import JEV_PRICE_PER_MTOK, JevBudgetExceeded, JevJudge, StubJudge
 from .schemas import Node
 from .tree_manager import KnowledgeTree, normalize_url
 
 log = logging.getLogger("research")
+
+# Worth skipping one decision for; auth / bad-request errors are not and still raise.
+TRANSIENT_JEV_ERRORS = (TypeSafeAPIConnectionError, TypeSafeAPITimeoutError, TypeSafeInternalServerError, TypeSafeRateLimitError)
+JEV_MAX_FAILURES = 5
 
 SearchFn = Callable[[str], Awaitable[list[searx.SearchResult]]]
 FetchFn = Callable[[str], Awaitable[scraper.Page]]
@@ -92,6 +103,7 @@ class Researcher:
         self.stop_reason: str | None = None
         self.timings: dict[str, float] = {}
         self.stage = "starting"  # read by the live UI
+        self.jev_failures = 0  # consecutive transient Jev errors
         self.emit: Callable[..., None] = plain_emit  # the rich UI swaps this out
         # Pages a search backend already fetched (Tavily raw content), keyed by node id.
         self.prefetched: dict[str, scraper.Page] = {}
@@ -109,12 +121,21 @@ class Researcher:
         return self.stop_reason is not None or self.out_of_time()
 
     async def _guard(self, coro):
-        """Budget exhaustion stops gathering but keeps what was collected."""
+        """Budget exhaustion stops gathering but keeps what was collected. A transient Jev
+        failure skips this one decision; JEV_MAX_FAILURES in a row stop gathering."""
         try:
-            return await coro
+            result = await coro
         except JevBudgetExceeded as e:
             self.stop_reason = self.stop_reason or str(e)
             return None
+        except TRANSIENT_JEV_ERRORS as e:
+            self.jev_failures += 1
+            log.warning("jev call failed (%d in a row): %s", self.jev_failures, e)
+            if self.jev_failures >= JEV_MAX_FAILURES:
+                self.stop_reason = self.stop_reason or f"Jev unreachable ({self.jev_failures} failures in a row)"
+            return None
+        self.jev_failures = 0
+        return result
 
     # --- stage 1-2 --------------------------------------------------------------
 
@@ -126,6 +147,8 @@ class Researcher:
             try:
                 self.draft = await self.draft_fn(self.ctx, self.b.seed_queries)
                 drafts, source = self.draft.queries, f"llm {self.draft.model}"
+                if self.draft.anchor:
+                    self.ctx.anchor = self.draft.anchor
             except Exception as e:  # any drafter failure falls back to the template plan
                 log.warning("query drafter failed, using template facets: %s", e)
         if not drafts:
@@ -168,7 +191,9 @@ class Researcher:
             if node is None:
                 continue
             node.score = p
-            if p >= self.g.relevance and len(r.content) >= 500:
+            # Search-backend text is used as is, except where we know a cleaner source
+            # (GitHub file pages are fetched raw instead; see canonical_fetch_url).
+            if p >= self.g.relevance and len(r.content) >= 500 and not node.url.startswith("https://raw.githubusercontent.com/"):
                 self.prefetched[node.id] = scraper.page_from_markdown(node.url, r.title, r.content, self.b.page_tokens)
             if p >= self.g.relevance:
                 self.tree.enqueue(node)
@@ -295,7 +320,7 @@ class Researcher:
             for cid in ids[1:]:
                 self.tree.nodes[cid].status = "promoted"
                 anchor.also_from.append(self.tree.nodes[cid].parent)
-            q = self.tree.add_query(f"{term} {self.ctx.core}", anchor.id, via)
+            q = self.tree.add_query(f"{term} {self.ctx.anchor}", anchor.id, via)
             if q:
                 q.score, q.status = p, "ran"
                 q.data["mentions"] = mentions
@@ -384,7 +409,8 @@ async def run(
     else:
         from .needle_client import NeedleClient
 
-        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency, api_key=keys.typesafe)
+        lens = {"sources": ctx.sources, "avoid": ctx.avoid, "concepts": ctx.concepts}
+        judge = JevJudge(settings.jev_model, settings.budgets.max_jev_calls, jev_log, settings.concurrency, api_key=keys.typesafe, lens=lens)
         needle = NeedleClient(needle_log)
 
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):  # needle's import resets these
@@ -402,15 +428,16 @@ async def run(
         tavily = tavily_client.TavilySearch(
             settings.tavily_depth,
             settings.tavily_max_results,
-            settings.tavily_prefer_domains,
+            settings.template.prefer_domains or settings.tavily_prefer_domains,
             settings.budgets.page_tokens,
             search_log,
             api_key=keys.tavily,
+            time_range=settings.template.time_range or None,
         )
 
     async def searxng(q: str):
         async with searx_sem:
-            results, dead = await searx.search(searx_http, settings.searx_url, q, settings.searx_engines, settings.budgets.results_per_query)
+            results, dead = await searx.search(searx_http, settings.searx_url, q, settings.template.searx_engines or settings.searx_engines, settings.budgets.results_per_query)
         search_log({"kind": "searxng", "query": q, "n": len(results), "unresponsive": dead})
         return results
 
@@ -588,6 +615,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--focus", action="append", default=[], help="term to cover explicitly (repeatable), e.g. --focus PCGrad")
     b = p.add_argument_group("budgets (see config.py; also settable in research.toml)")
     b.add_argument("--preset", default="standard", choices=sorted(cfg.PRESETS))
+    b.add_argument("--template", default="research", choices=sorted(cfg.TEMPLATES), help="starting template: research (papers), web (articles, docs, forums), market (is X worth investing in), market-trending (what's moving now)")
     b.add_argument("--config", type=Path, help="TOML file with [budgets]/[gates] tables")
     b.add_argument("--pages", help="pages per depth, e.g. 30,15,8 (length = max depth)")
     b.add_argument("--seed-queries", type=int)
@@ -619,7 +647,7 @@ def main(argv: list[str] | None = None) -> None:
     for noisy in ("httpx", "httpx2", "httpcore", "typesafe_sdk"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    settings = cfg.load(a.preset, a.config, build_overrides(a))
+    settings = cfg.load(a.preset, a.config, build_overrides(a), template=a.template)
     if a.print_config:
         print(json.dumps(dataclasses.asdict(settings), indent=2, default=str))
         return

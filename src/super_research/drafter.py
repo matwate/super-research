@@ -20,30 +20,35 @@ from .report import PRICES, strip_reasoning
 
 PROMPT = """{context}
 
-Write {n} diverse web search queries that together cover this research: key methods and model families, known technical problems and failure modes, benchmarks and datasets, recent ({year}) work, surveys, and code. Use the field's own vocabulary and synonyms, and spell out acronyms in some queries. Each query 3-8 words, no quotes or search operators.
-Return only JSON: {{"queries": ["..."]}}"""
+Write {n} diverse web search queries that together cover this research: {focus}. Use the field's own vocabulary and synonyms, and spell out acronyms in some queries. Each query 3-8 words, no quotes or search operators.
+Also give the anchor: the topic's subject in 2-4 words, used as a suffix on follow-up searches (e.g. "Python LLM APIs").
+Return only JSON: {{"anchor": "...", "queries": ["..."]}}"""
 
 
 @dataclass
 class Draft:
     queries: list[str]
+    anchor: str
     model: str
     input_tokens: int
     output_tokens: int
     cost_usd: float | None
 
 
-def parse(text: str, n: int) -> list[str]:
+def parse(text: str, n: int) -> tuple[list[str], str]:
+    """(queries, anchor); empty on unparseable output. An anchor over 5 words is dropped."""
     text = strip_reasoning(text)
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
-        return []
+        return [], ""
     try:
-        raw = json.loads(m.group(0)).get("queries", [])
+        data = json.loads(m.group(0))
     except json.JSONDecodeError:
-        return []
+        return [], ""
+    raw = data.get("queries", [])
     out = [" ".join(str(q).split()).strip(" .\"'") for q in raw if isinstance(q, str)]
-    return list(dict.fromkeys(q for q in out if 2 <= len(q) <= 120))[:n]
+    anchor = " ".join(str(data.get("anchor") or "").split()).strip(" .\"'")
+    return list(dict.fromkeys(q for q in out if 2 <= len(q) <= 120))[:n], anchor if 0 < len(anchor.split()) <= 5 else ""
 
 
 async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, session_id: str, year: int, api_key: str | None = None) -> Draft:
@@ -53,7 +58,7 @@ async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, sess
     body = {
         "model": model,
         "max_tokens": 4000,  # reasoning models spend tokens thinking before the JSON
-        "messages": [{"role": "user", "content": PROMPT.format(context=ctx.render(), n=n, year=year)}],
+        "messages": [{"role": "user", "content": PROMPT.format(context=ctx.render(), n=n, focus=ctx.draft_focus)}],
     }
     headers = {"Authorization": f"Bearer {key}", "User-Agent": "super-research/0.1", "x-opencode-session": session_id}
     async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=15.0)) as client:
@@ -64,7 +69,7 @@ async def draft(ctx: ResearchContext, n: int, *, base_url: str, model: str, sess
     usage = data.get("usage") or {}
     tin, tout = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     price = PRICES.get(model)
-    queries = parse(data["choices"][0]["message"].get("content") or "", n)
+    queries, anchor = parse(data["choices"][0]["message"].get("content") or "", n)
     if not queries:
         raise RuntimeError("drafter returned no parseable queries")
-    return Draft(queries, data.get("model", model), tin, tout, (tin * price[0] + tout * price[1]) / 1e6 if price else None)
+    return Draft(queries, anchor, data.get("model", model), tin, tout, (tin * price[0] + tout * price[1]) / 1e6 if price else None)

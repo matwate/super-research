@@ -54,7 +54,8 @@ _PROBLEM_HEADS = (
     r"imbalances?|patholog(?:y|ies)|bias|stiffness|instabilit(?:y|ies)|failures?|collapse|vanishing|"
     r"exploding|overfitting|underfitting|(?:non-)?identifiability|conflicts?|degradation|sensitivity|"
     r"scarcity|sparsity|ill-posedness|ill-conditioning|oscillations?|bottlenecks?|mismatch|"
-    r"trade-?offs?|forgetting|drift|leakage|spectral bias|convergence issues?"
+    r"trade-?offs?|forgetting|drift|leakage|spectral bias|convergence issues?|"
+    r"volatility|drawdowns?|dilution|illiquidity|overvaluation|bubble"
 )
 _PROBLEM = re.compile(rf"\b((?:[a-z][a-z-]{{2,}}\s+){{0,2}})({_PROBLEM_HEADS})\b", re.I)
 # Heads specific enough to stand alone; others need a modifier ("gradient imbalance", not "imbalance").
@@ -209,6 +210,8 @@ def clean_terms(raw: list[str], topic: str) -> list[str]:
         if not (2 <= len(t) <= 60) or len(words) > 6:
             continue
         if re.search(r"\bet al\b|^\d+$|https?://", t, re.I) or t.lower() in topic_l:
+            continue
+        if "/" in t and not re.fullmatch(r"[A-Za-z]{1,6}/[A-Za-z]{1,6}", t):  # URL path, not "AI/ML"-style
             continue
         if t.count("(") != t.count(")") or t.count("[") != t.count("]"):  # cut-off fragment
             continue

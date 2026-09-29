@@ -93,6 +93,228 @@ class Template:
         "{core} ablation study",
         "{core} review {last_year}",
     )
+    # --- the lens: what Jev, the drafter and the report LLM treat as useful ---------
+    # What a good source looks like (Jev result + link criteria).
+    sources: str = "a research paper, benchmark, survey, technical blog post, code repository, or documentation"
+    # What to reject besides `filter` (Jev result criteria).
+    avoid: str = "a product or marketing page, a shallow or beginner tutorial, a listing page with no content of its own"
+    # What counts as a named concept worth its own search (Jev concept gate).
+    concepts: str = "method, algorithm, model, dataset, or benchmark"
+    # What the seed queries should cover together (drafter prompt).
+    draft_focus: str = "key methods and model families, known technical problems and failure modes, benchmarks and datasets, recent ({year}) work, surveys, and code"
+    # Markdown outline of the report, and extra writing rules for the report LLM.
+    report_outline: str = """# <title>
+## Summary  (5-8 bullet points)
+## Methods landscape  (a comparison table: method, core idea, strengths, weaknesses, sources)
+## Empirical results  (benchmarks, datasets, reported numbers with citations; a table where possible)
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing  (gaps in the literature AND gaps in this search's coverage)
+## Sources  (S# - title - URL, one per line)"""
+    report_rules: str = ""
+    # Tavily: preferred domains (empty = settings.tavily_prefer_domains) and recency
+    # ("" | "day" | "week" | "month" | "year").
+    prefer_domains: tuple[str, ...] = ()
+    time_range: str = ""
+    # SearXNG engines for this template (empty = settings.searx_engines).
+    searx_engines: tuple[str, ...] = ()
+
+
+# --- starting templates -----------------------------------------------------------------
+# Market research: "is X worth investing in", "what's trending", asset-class studies
+# (stocks, funds, collectibles). The report presents evidence and both cases; it never
+# issues personal buy/sell calls, and every number carries an as-of date.
+_MARKET_RULES = (
+    "Attach an as-of date to every price, return, valuation, forecast or ranking, and say when a figure may be stale"
+    " | Separate reported facts from opinions and forecasts, and name who holds each opinion"
+    " | For every backtest or return study, state the period, the method, and known biases (survivorship,"
+    " look-ahead, selection, fees and transaction costs, spreads, liquidity) before its result"
+    " | Do not give personal buy, sell or hold instructions or price targets of your own; present the evidence"
+    " and what would have to be true for each case"
+    " | End the report with one line: This is research, not financial advice."
+)
+_MARKET_DOMAINS = (
+    "sec.gov",
+    "reuters.com",
+    "bloomberg.com",
+    "ft.com",
+    "wsj.com",
+    "cnbc.com",
+    "morningstar.com",
+    "marketwatch.com",
+    "finance.yahoo.com",
+    "seekingalpha.com",
+    "ssrn.com",
+    "nber.org",
+)
+_MARKET_LENS = dict(
+    sources=(
+        "a financial filing or earnings report, an analyst or equity research note, a reputable financial news"
+        " article, a market data or price-history page, an academic or industry study, or a backtest with a stated method"
+    ),
+    avoid=(
+        "a promotional or sponsored pick, a hype or pump post, a page with no data or no dates, a broker sign-up or"
+        " trading-app landing page"
+    ),
+    concepts="company, ticker, fund, index, asset class, product line, or named study, index or dataset",
+    report_rules=_MARKET_RULES,
+    prefer_domains=_MARKET_DOMAINS,
+)
+
+MARKET = Template(
+    intent=(
+        "evaluate {topic}{focus} as an investment: fundamentals or value drivers, valuation and pricing, recent"
+        " performance, catalysts and risks, analyst and academic views, and historical or backtested returns, plus"
+        " any {year} developments."
+    ),
+    deliverable=(
+        "an evidence-based investment case: bull and bear arguments, key numbers with dates, historical and"
+        " backtested performance with its caveats, risks, plus what the evidence cannot tell you."
+    ),
+    tone="analytical and skeptical, like an independent research note",
+    filter="skip sponsored picks, hype and pump posts, SEO listicles, and undated price predictions.",
+    facets=(
+        "{core} investment analysis",
+        "{core} returns historical performance",
+        "{core} backtest",
+        "{core} investment study",
+        "{core} valuation",
+        "{core} risks",
+        "{core} outlook {year}",
+        "{core} news {year}",
+        "{core} market data price history",
+        "{core} vs alternatives comparison",
+    ),
+    draft_focus=(
+        "value drivers and valuation, recent results and news, catalysts and risks, analyst and academic views,"
+        " historical returns and backtests, comparable assets or benchmarks, and the most recent ({year}) data"
+    ),
+    report_outline="""# <title>
+## Bottom line  (3-6 bullets: what the evidence says, not a buy/sell instruction)
+## Snapshot  (table: metric, value, as-of date, source)
+## Bull case
+## Bear case and risks
+## Historical performance and backtests  (table: study or test, period, method, result, biases, source)
+## What analysts, markets and studies say  (where they agree and disagree)
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    **_MARKET_LENS,
+)
+
+MARKET_TRENDING = Template(
+    intent=(
+        "find which {topic}{focus} are trending now and why: price moves, volume, news catalysts, sentiment, and"
+        " what the evidence says about each, plus how reliable such trends have been historically."
+    ),
+    deliverable=(
+        "a list of what is trending with the reason, key numbers with dates, and the main risk for each, plus"
+        " evidence on whether chasing these trends has paid off."
+    ),
+    tone="analytical and skeptical, like an independent market brief",
+    filter="skip sponsored picks, hype and pump posts, SEO listicles, and undated price predictions.",
+    facets=(
+        "{core} trending this week",
+        "{core} top gainers {year}",
+        "{core} most active volume",
+        "{core} news catalyst",
+        "{core} analyst upgrades downgrades",
+        "{core} momentum",
+        "{core} sentiment",
+        "momentum investing backtest evidence",
+    ),
+    draft_focus=(
+        "what is moving right now and why, volume and momentum, news catalysts, analyst changes, sentiment,"
+        " and evidence from studies and backtests on whether trend-following pays off"
+    ),
+    report_outline="""# <title>
+## Bottom line  (3-6 bullets, not a buy/sell instruction)
+## Trending now  (table: name or ticker, move, why, as-of date, main risk, sources)
+## Catalysts and drivers
+## Does chasing this pay off?  (momentum and trend-following evidence: study, period, method, result, biases)
+## Risks
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    time_range="week",
+    **_MARKET_LENS,
+)
+
+# General web: articles, blog posts, docs, changelogs and forum threads, no papers. For
+# practitioner questions like "how has calling AI models from Python evolved?".
+WEB = Template(
+    intent=(
+        "answer {topic}{focus} from articles, blog posts, official docs and changelogs, and forum discussions"
+        " (Hacker News, Reddit, Stack Overflow, GitHub), including how things changed over time and the {year} state."
+    ),
+    deliverable=(
+        "a clear answer with a dated timeline of how things changed, the current options compared, what"
+        " practitioners agree and disagree on, and common pitfalls, plus what is missing."
+    ),
+    tone="practical and precise, like a well-sourced long-form blog post",
+    filter="skip academic papers, SEO content farms, auto-generated listicles, and marketing pages.",
+    facets=(
+        "{core}",
+        "{core} blog",
+        "{core} guide {year}",
+        "{core} history timeline",
+        "{core} changelog release notes",
+        "{core} comparison",
+        "{core} hacker news discussion",
+        "{core} reddit",
+        "{core} stack overflow",
+        "{core} {last_year} vs {year}",
+    ),
+    sources=(
+        "an article or blog post by a practitioner, official documentation, a changelog or release notes, a"
+        " substantive forum or discussion thread (Hacker News, Reddit, Stack Overflow, GitHub issues or"
+        " discussions), a newsletter, or a talk writeup"
+    ),
+    avoid=(
+        "an academic paper, an SEO content farm or auto-generated listicle, a marketing or pricing page, or a"
+        " page with no content of its own"
+    ),
+    concepts="library, framework, tool, API, product, version, standard, or named technique",
+    draft_focus=(
+        "how the topic changed over the years (key releases and turning points), today's main options and how"
+        " they compare, practitioner opinions in forums and blogs, official docs and changelogs, and common"
+        " pitfalls, with the most recent ({year}) state"
+    ),
+    report_outline="""# <title>
+## Short answer  (3-6 bullets)
+## How it evolved  (a dated timeline: when, what changed, why it mattered, sources; if the question is not about change, the current state instead)
+## Current landscape  (table: option, what it is, good for, drawbacks, as of, sources)
+## What practitioners say  (consensus and disagreements from forums and blogs, with dates)
+## Pitfalls and gotchas
+## How the pieces connect  (derived from the knowledge tree)
+## What is missing or stale
+## Sources  (S# - title - URL, one per line)""",
+    report_rules=(
+        "Put a date or version on every claim about when something appeared, changed or was deprecated"
+        " | Prefer official docs and changelogs for facts; label blog and forum content as opinion or experience"
+        " | Report a community consensus only when several independent sources agree; otherwise attribute it to"
+        " the one source"
+    ),
+    prefer_domains=(
+        "news.ycombinator.com",
+        "reddit.com",
+        "stackoverflow.com",
+        "github.com",
+        "dev.to",
+        "lobste.rs",
+        "substack.com",
+        "medium.com",
+    ),
+    # Only these answer on the instance; the others fail fast and cost nothing.
+    searx_engines=("bing", "hackernews", "stackoverflow", "reddit"),
+)
+
+# Selectable with --template NAME (and listed in the web UI). "research" is the default.
+TEMPLATES: dict[str, Template] = {
+    "research": Template(),
+    "web": WEB,
+    "market": MARKET,
+    "market-trending": MARKET_TRENDING,
+}
 
 
 @dataclass(frozen=True)
@@ -213,10 +435,13 @@ def load(
     preset: str = "standard",
     config_file: Path | None = None,
     overrides: dict[str, Any] | None = None,
+    template: str = "research",
 ) -> Settings:
     if preset not in PRESETS:
         raise ValueError(f"unknown preset {preset!r}; choose from {sorted(PRESETS)}")
-    s = apply(Settings(), PRESETS[preset])
+    if template not in TEMPLATES:
+        raise ValueError(f"unknown template {template!r}; choose from {sorted(TEMPLATES)}")
+    s = replace(apply(Settings(), PRESETS[preset]), template=TEMPLATES[template])
     for path in (Path("research.toml"), config_file):
         if path and path.exists():
             s = apply(s, tomllib.loads(path.read_text()))

@@ -200,6 +200,8 @@ async def meta(request: Request):
         {
             "defaults": settings_json(base),
             "presets": presets,
+            # Python-side starting templates beyond the default (market, market-trending).
+            "templates": {name: json.loads(json.dumps(dataclasses.asdict(t), default=str)) for name, t in cfg.TEMPLATES.items() if name != "research"},
             "models": sorted(PRICES, key=lambda m: PRICES[m][1]),
             "prices": PRICES,
             "server_keys": {"opencode": bool(env.opencode), "typesafe": bool(env.typesafe), "tavily": bool(env.tavily)},
