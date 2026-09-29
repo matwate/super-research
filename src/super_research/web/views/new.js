@@ -330,18 +330,49 @@ export function renderNew(main) {
     const pages = String(state.budgets.pages_per_depth).split(",").map(Number).filter(Boolean);
     $("#preset-hint").textContent = `${pages.reduce((a, b) => a + b, 0)} pages over ${pages.length} depths · up to ${fmt.secs(Number(state.budgets.max_seconds))}`;
   }
+  // The OpenCode Go lineup, fetched live through the server with the user's key.
+  let lineup = null; // { models, live, error, prices }
+  async function loadModels(refresh = false) {
+    const note = $("#models-state");
+    if (note) note.textContent = "Checking OpenCode Go models…";
+    try {
+      lineup = await api.models(getKeys().opencode, refresh);
+    } catch (e) {
+      lineup = { models: meta.models, live: false, error: e.message, prices: meta.prices };
+    }
+    drawModels();
+  }
   function drawModels() {
     const m = state.models;
-    const opt = (list, cur) => list.map((v) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(v)}${meta.prices[v] ? ` · $${meta.prices[v][0]}/$${meta.prices[v][1]}` : ""}</option>`).join("");
-    const models = meta.models.includes(m.report_model) ? meta.models : [m.report_model, ...meta.models];
+    const list = lineup?.models || meta.models;
+    const prices = lineup?.prices || meta.prices;
+    const gone = (v) => lineup?.live && v && !list.includes(v);
+    const opt = (cur) => (list.includes(cur) || !cur ? list : [cur, ...list])
+      .map((v) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(v)}${gone(v) ? " · not offered now" : prices[v] ? ` · $${prices[v][0]}/$${prices[v][1]}` : ""}</option>`).join("");
+    const warn = [gone(m.report_model) && `Report model ${m.report_model} is gone from OpenCode Go. Pick another before you start.`,
+      gone(m.draft_model) && state.seed === "drafter" && `Drafter ${m.draft_model} is gone; the run would fall back to template seeds.`].filter(Boolean);
+    const status = !lineup ? "Checking OpenCode Go models…"
+      : lineup.live ? `${list.length} models live from OpenCode Go. Prices shown where known, per 1M tokens in/out.`
+      : `Built-in list: could not reach OpenCode Go (${lineup.error}). ${getKeys().opencode ? "" : "Add your OpenCode key to load the live list."}`;
     $("#model-fields").innerHTML = `
-      <div class="field"><label class="label" for="m-report">Report model</label><select class="select" id="m-report" data-model="report_model">${opt(models, m.report_model)}</select></div>
-      <div class="field"><label class="label" for="m-draft">Drafter model</label><select class="select" id="m-draft" data-model="draft_model">${opt(meta.models.includes(m.draft_model) ? meta.models : [m.draft_model, ...meta.models], m.draft_model)}</select></div>
+      <div class="field"><label class="label" for="m-report">Report model</label><select class="select" id="m-report" data-model="report_model">${opt(m.report_model)}</select></div>
+      <div class="field"><label class="label" for="m-draft">Drafter model</label><select class="select" id="m-draft" data-model="draft_model">${opt(m.draft_model)}</select></div>
       <div class="field"><label class="label" for="m-search">Search</label><select class="select" id="m-search" data-model="search_backends">
         ${[["auto", "Auto: Tavily + SearXNG"], ["tavily,searxng", "Tavily + SearXNG"], ["searxng", "SearXNG only (free)"], ["tavily", "Tavily only"]].map(([v, l]) => `<option value="${v}" ${m.search_backends === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label class="label" for="m-depth">Tavily depth</label><select class="select" id="m-depth" data-model="tavily_depth">
-        ${[["advanced", "Advanced · 2 credits"], ["basic", "Basic · 1 credit"]].map(([v, l]) => `<option value="${v}" ${m.tavily_depth === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>`;
+        ${[["advanced", "Advanced · 2 credits"], ["basic", "Basic · 1 credit"]].map(([v, l]) => `<option value="${v}" ${m.tavily_depth === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="row" style="grid-column:1/-1;margin-bottom:var(--space-3)">
+        <span class="meta muted" id="models-state" role="status">${esc(status)}</span>
+        <button class="spot-button" type="button" id="models-refresh">Refresh Models</button>
+      </div>
+      ${warn.length ? `<p class="notice notice--error" style="grid-column:1/-1;margin:0 0 var(--space-3)">${warn.map(esc).join(" ")}</p>` : ""}`;
   }
+  $("#model-fields").addEventListener("click", (e) => {
+    if (e.target.id === "models-refresh") loadModels(true);
+  });
+  $("#model-fields").addEventListener("change", (e) => {
+    if (e.target.dataset.model === "report_model" || e.target.dataset.model === "draft_model") drawModels();
+  });
   $("#presets").addEventListener("click", (e) => {
     const n = e.target.closest("[data-preset]")?.dataset.preset;
     if (n) applyPreset(n);
@@ -438,6 +469,7 @@ export function renderNew(main) {
     if (state.budgets) drawBudget(); else applyPreset(state.preset in m.presets ? state.preset : "standard");
     drawTemplates();
     drawModels();
+    loadModels();
     drawFocus();
     changed();
   }).catch((e) => {

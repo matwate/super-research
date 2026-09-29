@@ -30,7 +30,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from . import config as cfg
-from . import context
+from . import context, opencode
 from .jev_client import JEV_PRICE_PER_MTOK
 from .main import run, slugify
 from .report import PRICES
@@ -209,6 +209,22 @@ async def meta(request: Request):
     )
 
 
+async def models(request: Request):
+    """OpenCode Go's live lineup for the dropdowns. POST so the key stays out of URLs and
+    access logs. Falls back to the price table when the list can't be fetched."""
+    body = await request.json()
+    key = (body.get("key") or "").strip() or (cfg.Keys.from_env().opencode if request.app.state.env_keys else None)
+    base: cfg.Settings = request.app.state.base_settings
+    fallback = sorted(PRICES, key=lambda m: PRICES[m][1])
+    if base.offline:
+        return JSONResponse({"models": fallback, "live": False, "error": "offline mode", "prices": PRICES})
+    try:
+        ids = await opencode.model_ids(base.opencode_url, key, refresh=bool(body.get("refresh")))
+    except Exception as e:
+        return JSONResponse({"models": fallback, "live": False, "error": str(e)[:300], "prices": PRICES})
+    return JSONResponse({"models": ids, "live": True, "error": None, "prices": PRICES})
+
+
 async def preview(request: Request):
     """Stage 0 for a topic and template, without running anything."""
     body = await request.json()
@@ -260,6 +276,15 @@ async def start_run(request: Request):
             missing.append("OpenCode Go")
         if missing:
             return error(f"missing API key: {', '.join(missing)}. Add it on the Keys page.", 401)
+        # Refuse a report model OpenCode Go no longer offers before anything is spent.
+        if write_report and keys.opencode:
+            try:
+                ids = await opencode.model_ids(settings.opencode_url, keys.opencode)
+            except Exception as e:
+                log.warning("could not list OpenCode models: %s", e)
+            else:
+                if settings.report_model not in ids:
+                    return error(opencode.missing_model_message("Report model", settings.report_model, ids))
 
     if sum(1 for r in RUNS.values() if r.status == "running") >= app.state.max_runs:
         return error("the server is busy with other runs; try again when one finishes", 429)
@@ -434,6 +459,7 @@ def create_app(base_settings: cfg.Settings | None = None, env_keys: bool = False
             Route("/", index),
             Route("/api/meta", meta),
             Route("/api/preview", preview, methods=["POST"]),
+            Route("/api/models", models, methods=["POST"]),
             Route("/api/runs", list_runs),
             Route("/api/runs", start_run, methods=["POST"]),
             Route("/api/runs/{run_id}", get_run),

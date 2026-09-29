@@ -44,6 +44,11 @@ and never writes them to `run.json`, logs or `reports/`.
   to the tree, and each `[S#]` citation selects its source node.
 - **Runs**: every run in `reports/`, live or finished.
 
+The model dropdowns load OpenCode Go's live `/models` list with your key, so new models show
+up and retired ones don't. Before any spend, both the web UI and the CLI check the report
+model against that list and stop with the current lineup if it is gone. A missing drafter
+model falls back to template seeds.
+
 ## Starting template
 
 Stage 0 is a template, and you can edit it: intent, deliverable, tone, filter, and the seed
@@ -104,6 +109,7 @@ uv run research "..." --pages 40,20,10,5                # per-depth page budget;
 uv run research "..." --gate delve=0.6 --gate relevance=0.45
 uv run research "..." --set budgets.expansion_rounds=2 --set concurrency=4
 uv run research "..." --model glm-5.3                   # any OpenCode Go model id
+uv run research --list-models                           # what OpenCode Go offers right now
 uv run research "..." --no-report                       # gather only, no LLM spend
 uv run research "..." --set 'search_backends=["searxng"]'       # free search only
 uv run research "..." --set tavily_depth=basic          # 1 credit per search instead of 2

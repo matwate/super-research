@@ -14,6 +14,7 @@ async function request(path, options = {}) {
 let metaCache;
 export const api = {
   meta: () => (metaCache ||= request("/api/meta").catch((e) => { metaCache = null; throw e; })),
+  models: (key, refresh = false) => request("/api/models", { method: "POST", body: JSON.stringify({ key: key || "", refresh }) }),
   preview: (body) => request("/api/preview", { method: "POST", body: JSON.stringify(body) }),
   runs: () => request("/api/runs"),
   run: (id) => request(`/api/runs/${encodeURIComponent(id)}`),

@@ -26,7 +26,7 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from . import config as cfg
-from . import context, report, scraper, searx, tavily_client
+from . import context, opencode, report, scraper, searx, tavily_client
 from .needle_client import problem_phrases
 from .jev_client import JEV_PRICE_PER_MTOK, JevBudgetExceeded, JevJudge, StubJudge
 from .schemas import Node
@@ -337,6 +337,23 @@ def backends(settings: cfg.Settings, keys: cfg.Keys | None = None) -> list[str]:
     return names
 
 
+async def check_models(settings: cfg.Settings, api_key: str, write_report: bool) -> cfg.Settings:
+    """The Go lineup changes often. Fail before any spend if the report model is gone;
+    a missing drafter only falls back to template seeds. If the list can't be fetched,
+    carry on and let the call itself report the problem."""
+    try:
+        ids = await opencode.model_ids(settings.opencode_url, api_key)
+    except Exception as e:
+        log.warning("could not list OpenCode models, skipping the check: %s", e)
+        return settings
+    if write_report and settings.report_model not in ids:
+        raise RuntimeError(opencode.missing_model_message("report_model", settings.report_model, ids))
+    if settings.draft_model and settings.draft_model not in ids:
+        log.warning("%s; using template seeds", opencode.missing_model_message("draft_model", settings.draft_model, ids))
+        settings = cfg.apply(settings, {"draft_model": ""})
+    return settings
+
+
 async def run(
     topic: str,
     settings: cfg.Settings,
@@ -348,6 +365,8 @@ async def run(
     run_dir: Path | None = None,
 ) -> Path:
     keys = keys or cfg.Keys.from_env()
+    if not settings.offline and keys.opencode:
+        settings = await check_models(settings, keys.opencode, write_report)
     ctx = context.build(topic, intent, focus, template=settings.template)
     run_dir = run_dir or settings.reports_dir / slugify(topic) / dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -585,6 +604,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--offline", action="store_true", help="stub Jev/Needle and skip the LLM (still searches and scrapes)")
     p.add_argument("--no-report", action="store_true", help="gather only; skip the final LLM call")
     p.add_argument("--print-config", action="store_true")
+    p.add_argument("--list-models", action="store_true", help="print the models OpenCode Go offers right now")
     p.add_argument("--plain", action="store_true", help="log lines instead of the rich live dashboard")
     p.add_argument("-v", "--verbose", action="store_true")
     a = p.parse_args(argv)
@@ -602,6 +622,12 @@ def main(argv: list[str] | None = None) -> None:
     settings = cfg.load(a.preset, a.config, build_overrides(a))
     if a.print_config:
         print(json.dumps(dataclasses.asdict(settings), indent=2, default=str))
+        return
+    if a.list_models:
+        for m in asyncio.run(opencode.model_ids(settings.opencode_url, cfg.Keys.from_env().opencode)):
+            price = report.PRICES.get(m)
+            marks = [f"${price[0]}/${price[1]} per 1M" if price else "", "report" if m == settings.report_model else "", "drafter" if m == settings.draft_model else ""]
+            print(m.ljust(28), "  ".join(x for x in marks if x))
         return
     if not a.topic:
         p.error("topic is required")

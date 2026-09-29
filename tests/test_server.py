@@ -122,3 +122,33 @@ def test_modules_served_as_javascript(client):
     for path in ("/static/app.js", "/static/util.js", "/static/vendor/marked.esm.js", "/static/vendor/purify.es.js"):
         r = client.get(path)
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript"), path
+
+
+def test_models_live_list_and_gone_report_model(tmp_path, monkeypatch):
+    seen = []
+
+    async def fake_ids(base_url, key, refresh=False):
+        seen.append((key, refresh))
+        return ["glm-5.3-flash", "gpt-6-luna", "minimax-m3"]
+
+    monkeypatch.setattr("super_research.opencode.model_ids", fake_ids)
+    base = config.load("standard", None, {"reports_dir": str(tmp_path)})
+    with TestClient(create_app(base)) as c:
+        r = c.post("/api/models", json={"key": "sk-x", "refresh": True}).json()
+        assert r["live"] and "gpt-6-luna" in r["models"] and seen[-1] == ("sk-x", True)
+        r = c.post("/api/runs", json={"topic": "x", "keys": {"opencode": "sk-x", "typesafe": "t"}, "settings": {"report_model": "gpt-5.6-luna"}})
+        assert r.status_code == 400 and "gpt-6-luna" in r.json()["error"]
+
+
+async def test_check_models_drops_gone_drafter(monkeypatch):
+    from super_research.main import check_models
+
+    async def fake_ids(base_url, key, refresh=False):
+        return ["minimax-m3"]
+
+    monkeypatch.setattr("super_research.opencode.model_ids", fake_ids)
+    s = config.load("standard", None, {"draft_model": "glm-4-flash", "report_model": "minimax-m3"})
+    assert (await check_models(s, "k", True)).draft_model == ""
+    s = config.load("standard", None, {"report_model": "gpt-5.6-luna"})
+    with pytest.raises(RuntimeError, match="not on OpenCode Go"):
+        await check_models(s, "k", True)
